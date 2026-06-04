@@ -1,0 +1,6 @@
+# Cron 定时任务
+# 格式: - { name: 显示名, target: cron 命令关键字 }
+# 检查 crontab 中是否存在包含该关键字的任务
+
+- { name: "eyes 告警",     target: "check.py" }
+- { name: "eyes 日报",     target: "report" }

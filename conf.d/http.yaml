@@ -1,8 +1,0 @@
-# HTTP 端点 (手动管理 — 不在 nginx 子域名下的服务)
-# 格式: - { name: 显示名, url: 地址, timeout: 秒(可选) }
-#
-# 有子域名的服务由 --sync 自动发现，无需手动添加
-# 只要有 HTTP 响应(包括 404)就视为在线
-
-- { name: "Uptime Kuma",    url: "http://localhost:3001",  timeout: 5 }
-- { name: "ARP Backend",    url: "http://localhost:8089",  timeout: 5 }

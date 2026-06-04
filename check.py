@@ -168,10 +168,22 @@ class HttpChecker(Checker):
             req.add_header("User-Agent", "eyes/1.0")
             resp = urllib.request.urlopen(req, timeout=timeout)
             ms = int((time.monotonic() - start) * 1000)
-            return self._ok(svc, f"{resp.getcode()} ({ms}ms)")
+            code = resp.getcode()
+            # 2xx/3xx = OK, 4xx = 警告, 5xx = 失败
+            if 200 <= code < 400:
+                return self._ok(svc, f"{code} ({ms}ms)")
+            elif 400 <= code < 500:
+                return self._ok(svc, f"{code} ({ms}ms) ⚠")
+            else:
+                return self._fail(svc, f"{code} ({ms}ms)")
         except urllib.error.HTTPError as e:
             ms = int((time.monotonic() - start) * 1000)
-            return self._ok(svc, f"{e.code} ({ms}ms)")
+            if 200 <= e.code < 400:
+                return self._ok(svc, f"{e.code} ({ms}ms)")
+            elif 400 <= e.code < 500:
+                return self._ok(svc, f"{e.code} ({ms}ms) ⚠")
+            else:
+                return self._fail(svc, f"{e.code} ({ms}ms)")
         except urllib.error.URLError as e:
             return self._fail(svc, f"连接失败: {e.reason}")
         except socket.timeout:
@@ -200,9 +212,159 @@ class CommandChecker(Checker):
             return self._fail(svc, str(e))
 
 
+class CrondChecker(Checker):
+    """检查 crontab 中是否存在指定的任务"""
+    check_type = "crond"
+
+    def _parse_cron_schedule(self, parts: list[str]) -> str:
+        """将 cron 表达式转为可读的调度描述"""
+        if len(parts) < 5:
+            return "未知"
+
+        minute, hour, day, month, dow = parts[0], parts[1], parts[2], parts[3], parts[4]
+
+        # 每分钟
+        if minute == "*" and hour == "*":
+            return "每分钟"
+        # 每小时
+        if minute != "*" and hour == "*":
+            return f"每小时第 {minute} 分钟"
+        # 每天
+        if minute != "*" and hour != "*" and day == "*" and month == "*" and dow == "*":
+            return f"每天 {hour}:{minute.zfill(2)}"
+        # 每周
+        if day == "*" and month == "*" and dow != "*":
+            dow_names = {"0": "日", "1": "一", "2": "二", "3": "三", "4": "四", "5": "五", "6": "六"}
+            dow_name = dow_names.get(dow, dow)
+            return f"每周{ dow_name } {hour}:{minute.zfill(2)}"
+        # 其他
+        return f"{minute} {hour} {day} {month} {dow}"
+
+    def check(self, svc: dict) -> Result:
+        target = svc["target"]  # cron 任务的关键字/命令片段
+        try:
+            r = subprocess.run(
+                ["crontab", "-l"], capture_output=True, text=True, timeout=5,
+            )
+            if r.returncode != 0:
+                return self._fail(svc, "无法读取 crontab")
+
+            lines = [l.strip() for l in r.stdout.strip().split("\n")
+                     if l.strip() and not l.strip().startswith("#")]
+
+            for line in lines:
+                if target in line:
+                    parts = line.split()
+                    if len(parts) >= 5:
+                        schedule = self._parse_cron_schedule(parts[:5])
+                        return self._ok(svc, schedule)
+                    return self._ok(svc, f"已配置: {line[:60]}")
+
+            return self._fail(svc, f"未找到包含 '{target}' 的 cron 任务")
+        except Exception as e:
+            return self._fail(svc, str(e))
+
+
+class PortScanChecker(Checker):
+    """安全审计：检查端口是否在白名单中"""
+    check_type = "portscan"
+
+    def _build_whitelist(self) -> set[int]:
+        """自动构建端口白名单：nginx 路由 + docker 容器 + 系统服务"""
+        whitelist = set()
+
+        # 1. 从 nginx 路由获取
+        try:
+            nginx_dir = "/home/zhuqin/star/gateway/nginx/conf.d"
+            for route in _discover_nginx_routes(nginx_dir):
+                whitelist.add(route["port"])
+        except Exception:
+            pass
+
+        # 2. 从运行中的 Docker 容器获取
+        try:
+            r = subprocess.run(
+                ["docker", "ps", "--format", "{{.Ports}}"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if r.returncode == 0:
+                for line in r.stdout.strip().split("\n"):
+                    for m in re.finditer(r"(?:0\.0\.0\.0|::|\*):(\d+)->", line):
+                        whitelist.add(int(m.group(1)))
+        except Exception:
+            pass
+
+        # 3. 系统服务端口
+        whitelist.update([22, 80])
+
+        # 4. 从白名单配置文件读取例外
+        whitelist_file = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "conf.d", "port_whitelist.txt"
+        )
+        if os.path.exists(whitelist_file):
+            try:
+                with open(whitelist_file) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and line.isdigit():
+                            whitelist.add(int(line))
+            except Exception:
+                pass
+
+        return whitelist
+
+    def _get_port_info(self, port: int) -> tuple[str, str]:
+        """获取端口的协议和进程信息，返回 (proto, proc)"""
+        # TCP
+        try:
+            r = subprocess.run(
+                ["ss", "-tlnp"], capture_output=True, text=True, timeout=5,
+            )
+            if r.returncode == 0:
+                for line in r.stdout.split("\n"):
+                    if f":{port} " in line or f":{port}\t" in line:
+                        m = re.search(r'users:\(\("([^"]+)"', line)
+                        proc = m.group(1) if m else "?"
+                        return "tcp", proc
+        except Exception:
+            pass
+
+        # UDP
+        try:
+            r = subprocess.run(
+                ["ss", "-ulnp"], capture_output=True, text=True, timeout=5,
+            )
+            if r.returncode == 0:
+                for line in r.stdout.split("\n"):
+                    if f":{port} " in line or f":{port}\t" in line:
+                        m = re.search(r'users:\(\("([^"]+)"', line)
+                        proc = m.group(1) if m else "?"
+                        return "udp", proc
+        except Exception:
+            pass
+
+        return "", ""
+
+    def check(self, svc: dict) -> Result:
+        """检查指定端口是否在白名单中"""
+        port = int(svc["target"])
+        whitelist = self._build_whitelist()
+
+        proto, proc = self._get_port_info(port)
+
+        if not proto:
+            return self._fail(svc, f":{port} 未监听")
+
+        if port in whitelist:
+            return self._ok(svc, f":{port} ({proto}) ({proc})")
+        else:
+            return self._ok(svc, f":{port} ({proto}) ({proc}) ⚠ 未知")
+
+
 CHECKER_REGISTRY: dict[str, Checker] = {
     cls.check_type: cls()
-    for cls in [DockerChecker, SystemdChecker, PortChecker, HttpChecker, CommandChecker]
+    for cls in [DockerChecker, SystemdChecker, PortChecker, HttpChecker,
+                CommandChecker, CrondChecker, PortScanChecker]
 }
 
 
@@ -232,9 +394,10 @@ _CATEGORY_META = {
     "http":     {"type": "http",     "title": "HTTP 端点"},
     "port":     {"type": "port",     "title": "端口监听"},
     "command":  {"type": "command",  "title": "自定义命令"},
+    "crond":    {"type": "crond",    "title": "Cron 定时任务"},
+    "portscan": {"type": "portscan", "title": "端口扫描"},
     # 自动生成的文件 (nginx auto-discover)
-    "_nginx_docker": {"type": "docker", "title": "Docker 容器 (Nginx 自动发现)"},
-    "_nginx_http":   {"type": "http",   "title": "HTTP 端点 (Nginx 自动发现)"},
+    "_nginx_docker": {"type": "docker", "title": "Docker 容器"},
 }
 
 
@@ -369,7 +532,7 @@ def _container_to_display_name(container: str, subdomain: str = "") -> str:
 
 
 def sync_from_nginx(nginx_conf_dir: str, eyes_conf_dir: str) -> dict:
-    """从 nginx 配置自动发现服务，更新 _nginx_docker.yaml 和 _nginx_http.yaml。
+    """从 nginx 配置自动发现服务，更新 _nginx_docker.yaml。
     返回 {added: [...], removed: [...], unchanged: [...]}"""
     routes = _discover_nginx_routes(nginx_conf_dir)
 
@@ -381,7 +544,6 @@ def sync_from_nginx(nginx_conf_dir: str, eyes_conf_dir: str) -> dict:
 
     # 找到每个端口对应的容器
     docker_entries = []
-    http_entries = []
     port_to_container = {}
 
     for r in routes:
@@ -394,24 +556,15 @@ def sync_from_nginx(nginx_conf_dir: str, eyes_conf_dir: str) -> dict:
 
         if container:
             docker_entries.append({"name": display, "target": container})
-        http_entries.append({
-            "name": display,
-            "url": f"http://localhost:{port}",
-            "timeout": 5,
-        })
 
     # 读取旧的自动生成文件，比较变化
     docker_path = os.path.join(eyes_conf_dir, "_nginx_docker.yaml")
-    http_path = os.path.join(eyes_conf_dir, "_nginx_http.yaml")
 
     old_docker = _read_auto_entries(docker_path)
-    old_http = _read_auto_entries(http_path)
 
     # 生成新文件内容
     new_docker_names = {e["name"] for e in docker_entries}
     old_docker_names = {e["name"] for e in old_docker}
-    new_http_names = {e["name"] for e in http_entries}
-    old_http_names = {e["name"] for e in old_http}
 
     added = list(new_docker_names - old_docker_names)
     removed = list(old_docker_names - new_docker_names)
@@ -419,7 +572,6 @@ def sync_from_nginx(nginx_conf_dir: str, eyes_conf_dir: str) -> dict:
 
     # 写入文件
     _write_auto_entries(docker_path, docker_entries, "Docker 容器 (Nginx 自动发现)")
-    _write_auto_entries(http_path, http_entries, "HTTP 端点 (Nginx 自动发现)")
 
     return {
         "added": added,
@@ -471,14 +623,16 @@ def _load_config(path: str) -> dict:
 
 
 def _load_service_groups(config: dict, config_dir: str) -> list[dict]:
-    """从 conf.d/ 目录加载所有服务分组"""
+    """从 conf.d/ 目录加载所有服务分组，同类型自动合并"""
     conf_dir = Path(config_dir)
     if not conf_dir.is_dir():
         print(f"{C.RED}错误: 配置目录不存在: {conf_dir}{C.RESET}")
         sys.exit(1)
 
-    groups = []
-    # 按文件名排序，保证顺序稳定
+    # 按类型收集服务
+    type_services: dict[str, list] = {}
+    type_title: dict[str, str] = {}
+
     for f in sorted(conf_dir.glob("*.yaml")):
         category = f.stem  # 文件名去掉 .yaml
         meta = _CATEGORY_META.get(category)
@@ -497,10 +651,19 @@ def _load_service_groups(config: dict, config_dir: str) -> list[dict]:
         for svc in items:
             svc["type"] = svc_type
 
-        groups.append({
-            "group": meta["title"],
-            "services": items,
-        })
+        if svc_type not in type_services:
+            type_services[svc_type] = []
+            type_title[svc_type] = meta["title"]
+        type_services[svc_type].extend(items)
+
+    # 转换为 groups 列表，按层级排序
+    groups = []
+    for svc_type in ["docker", "systemd", "crond", "command", "http", "port", "portscan"]:
+        if svc_type in type_services:
+            groups.append({
+                "group": type_title[svc_type],
+                "services": type_services[svc_type],
+            })
 
     return groups
 
@@ -570,7 +733,7 @@ def report_terminal(groups: list[dict], quiet: bool = False) -> bool:
         failed += g_total - g_pass
 
         color = C.GREEN if g_pass == g_total else C.RED
-        print(f"\n  {C.BOLD}{g['group']}{C.RESET}  {color}({g_pass}/{g_total}){C.RESET}")
+        print(f"\n  {C.BOLD}{g['group']}  ({g_pass}/{g_total}){C.RESET}  {color}{'✓' if g_pass == g_total else '✗'}{C.RESET}")
         print(f"  {C.DIM}{'─' * 48}{C.RESET}")
 
         for s in svcs:
@@ -616,7 +779,11 @@ def _build_html(groups: list[dict], stats: dict, mode: str) -> str:
 
     rows = ""
     for g in groups:
-        rows += f'<tr><td colspan="3" style="background:#f8f9fa;padding:10px 16px;font-weight:bold;color:#333;border-bottom:1px solid #dee2e6">{g["group"]}</td></tr>'
+        svcs = g["services"]
+        g_pass = sum(1 for s in svcs if s.ok)
+        g_total = len(svcs)
+        status_icon = "✓" if g_pass == g_total else "✗"
+        rows += f'<tr><td colspan="3" style="background:#f8f9fa;padding:10px 16px;font-weight:bold;color:#333;border-bottom:1px solid #dee2e6">{g["group"]}  ({g_pass}/{g_total})  {status_icon}</td></tr>'
         for s in g["services"]:
             if is_alert and s.ok:
                 continue
@@ -667,7 +834,11 @@ def _build_text(groups: list[dict], stats: dict, mode: str) -> str:
     lines = [title, now_str, "",
              f"总数: {stats['total']}  通过: {stats['passed']}  失败: {stats['failed']}", ""]
     for g in groups:
-        lines.append(f"[{g['group']}]")
+        svcs = g["services"]
+        g_pass = sum(1 for s in svcs if s.ok)
+        g_total = len(svcs)
+        status_icon = "✓" if g_pass == g_total else "✗"
+        lines.append(f"[{g['group']}  ({g_pass}/{g_total})  {status_icon}]")
         for s in g["services"]:
             if is_alert and s.ok:
                 continue

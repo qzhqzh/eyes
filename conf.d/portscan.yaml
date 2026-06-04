@@ -1,0 +1,37 @@
+# 端口扫描 — 安全审计
+# 格式: - { name: 显示名, target: 端口号 }
+# 每个端口单独一行，自动检测 TCP/UDP 和服务名
+
+# ─── TCP 端口 ─────────────────────────────────
+- { name: "SSH",             target: 22 }
+- { name: "DNS",             target: 53 }
+- { name: "HTTP",            target: 80 }
+- { name: "TrafficMeter",    target: 3000 }
+- { name: "UptimeKuma",      target: 3001 }
+- { name: "Auraxis",         target: 3010 }
+- { name: "Hub",             target: 4000 }
+- { name: "Inventory",       target: 5000 }
+- { name: "Converter",       target: 5173 }
+- { name: "Postgres",        target: 5432 }
+- { name: "Mihomo",          target: 7890 }
+- { name: "Mihomo",          target: 7892 }
+- { name: "Converter-BE",    target: 8000 }
+- { name: "ARP",             target: 8008 }
+- { name: "ARP",             target: 8009 }
+- { name: "CattleDB-FE",     target: 8086 }
+- { name: "CattleDB-BE",     target: 8087 }
+- { name: "Design",          target: 8088 }
+- { name: "ARP",             target: 8089 }
+- { name: "TTT",             target: 8091 }
+- { name: "Vaultwarden",     target: 8222 }
+- { name: "Mihomo",          target: 9090 }
+- { name: "LogWood",         target: 10000 }
+- { name: "LogWood",         target: 10001 }
+- { name: "ARP",             target: 18085 }
+- { name: "ARP",             target: 18095 }
+- { name: "EchoMe-API",      target: 20000 }
+- { name: "EchoMe-Web",      target: 20001 }
+- { name: "EchoMe-Embed",    target: 20002 }
+
+# ─── UDP 端口 ─────────────────────────────────
+- { name: "DHCP",            target: 68 }
