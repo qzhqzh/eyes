@@ -1,0 +1,5 @@
+# 端口监听
+# 格式: - { name: 显示名, target: 端口号 }
+
+- { name: "Nginx (80)",       target: 80 }
+- { name: "TTT Nginx (8091)", target: 8091 }

@@ -1,0 +1,21 @@
+# ============================================
+# eyes — 主配置
+# ============================================
+# 复制此文件为 config.yaml，填入实际值
+# cp config.example.yaml config.yaml
+
+conf_dir: "conf.d"
+
+# ─── 邮件通知 ─────────────────────────────────
+email:
+  enabled: true
+  method: "smtp"            # himalaya | smtp
+  from: "your@email.com"    # 改为你的邮箱
+  to:
+    - "your@email.com"      # 改为收件人邮箱
+  smtp:
+    host: "smtp.example.com"
+    port: 25
+    ssl: false
+    user: "your@email.com"
+    password: "your_password_here"  # ⚠ 不要提交真实密码到公开仓库

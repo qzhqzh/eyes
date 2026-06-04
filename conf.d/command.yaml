@@ -1,0 +1,6 @@
+# 自定义命令
+# 格式: - { name: 显示名, command: shell命令, timeout: 秒(可选) }
+# 退出码 0 = OK
+
+- { name: "磁盘空间", command: "df / --output=pcent | tail -1 | tr -d ' %' | awk '{if($1+0<85) exit 0; else exit 1}'", timeout: 5 }
+- { name: "Docker 引擎", command: "docker info >/dev/null 2>&1", timeout: 10 }

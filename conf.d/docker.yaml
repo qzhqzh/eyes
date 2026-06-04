@@ -1,0 +1,28 @@
+# Docker 容器 (手动管理 — 不在 nginx 子域名下的服务)
+# 格式: - { name: 显示名, target: 容器名 }
+#
+# 有子域名的服务由 --sync 自动发现，无需手动添加
+# 增加: 加一行
+# 删除: 删掉或注释掉那一行
+
+# ─── EchoMe 内部组件 ─────────────────────────────────
+- { name: "EchoMe Embedding",   target: echome-embedding-1 }
+- { name: "EchoMe Postgres",    target: echome-postgres-1 }
+- { name: "EchoMe Redis",       target: echome-redis-1 }
+
+# ─── ARP 全套 ────────────────────────────────────────
+- { name: "ARP Backend",        target: arp_api_backend_prod }
+- { name: "ARP Celery",         target: arp_api_celery_prod }
+- { name: "ARP DB",             target: arp_api_db_prod }
+- { name: "ARP Redis",          target: arp_api_redis_prod }
+- { name: "ARP HTML",           target: arp_html }
+- { name: "ARP HTML Lingsi",    target: arp_html_lingsi }
+
+# ─── TrafficMeter 内部组件 ────────────────────────────
+- { name: "TrafficMeter DB",    target: trafficmeter-db }
+
+# ─── 其他独立服务 ─────────────────────────────────────
+- { name: "Nginx Gateway",      target: star-gateway-nginx }
+- { name: "Uptime Kuma",        target: uptime-kuma }
+- { name: "TTT Nginx",          target: ttt-nginx-1 }
+- { name: "TTT Web",            target: ttt-web-1 }
