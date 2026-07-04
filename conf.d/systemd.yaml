@@ -2,5 +2,4 @@
 # 格式: - { name: 显示名, target: unit 名 }
 
 - { name: "Docker Engine",  target: docker.service }
-- { name: "Mihomo Proxy",   target: mihomo.service }
 - { name: "SSH Server",     target: ssh.service }

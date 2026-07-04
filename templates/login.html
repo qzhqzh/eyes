@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}eyes — 登录{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-center min-h-screen" style="padding: var(--eyes-spacing);">
+    <div class="e-card" style="width: 100%; max-width: 400px;">
+        <div style="padding: var(--eyes-spacing-lg);">
+            <div class="text-center mb-5">
+                <div style="font-size: 48px; margin-bottom: var(--eyes-spacing);">👁</div>
+                <h1 style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-semibold); color: var(--eyes-text-primary);">eyes</h1>
+                <p class="text-sm text-muted mt-1">服务健康监控系统</p>
+            </div>
+            
+            {% if error %}
+            <div style="background: var(--eyes-danger-light); color: var(--eyes-danger); padding: var(--eyes-spacing-sm); border-radius: var(--eyes-radius); text-align: center; font-size: var(--eyes-font-size-md); margin-bottom: var(--eyes-spacing);">
+                {{ error }}
+            </div>
+            {% endif %}
+            
+            <form method="POST" action="/login">
+                <div class="form-group">
+                    <label class="form-label">访问密码</label>
+                    <input type="password" class="e-input" id="password" name="password" 
+                           placeholder="请输入访问密码" autofocus required>
+                </div>
+                <button type="submit" class="e-btn e-btn-primary w-full mt-4">登录</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

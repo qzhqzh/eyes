@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}eyes{% endblock %}</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Eyes UI 组件库 -->
+    <link rel="stylesheet" href="/static/eyes-ui.css">
+    <script src="/static/eyes-ui.js"></script>
+    
+    {% block extra_css %}{% endblock %}
+    {% block extra_js %}{% endblock %}
+</head>
+<body>
+    {% block content %}{% endblock %}
+    <div id="eyes-toast" class="e-toast e-toast-container e-toast-container-bottom"></div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

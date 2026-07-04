@@ -1,0 +1,783 @@
+{% extends "base.html" %}
+
+{% block title %}eyes — 服务健康监控{% endblock %}
+
+{% block content %}
+<div class="flex min-h-screen">
+    <!-- ========== 侧边栏 ========== -->
+    <nav class="flex flex-col" style="width: 220px; box-sizing: border-box; position: fixed; height: 100vh; padding: var(--eyes-spacing); padding-right: 0;">
+        <div class="flex items-center gap-3 px-3 mb-5">
+            <span style="font-size: 24px;">👁</span>
+            <h1 style="font-size: 18px; font-weight: 600; color: var(--eyes-text-primary);">eyes</h1>
+        </div>
+        
+        <ul class="flex-1" style="list-style: none;">
+            <li class="mb-1">
+                <a class="nav-link active" onclick="switchTab('items')" data-tab="items">
+                    <span style="width: 20px; text-align: center;">📝</span>
+                    服务状态
+                </a>
+            </li>
+            <li class="mb-1">
+                <a class="nav-link" onclick="switchTab('settings')" data-tab="settings">
+                    <span style="width: 20px; text-align: center;">⚙️</span>
+                    推送设置
+                </a>
+            </li>
+        </ul>
+        
+        <div style="margin-top: auto; padding-top: var(--eyes-spacing);">
+            <a class="nav-link" href="/logout">
+                <span style="width: 20px; text-align: center;">🚪</span>
+                退出登录
+            </a>
+        </div>
+    </nav>
+    
+    <!-- ========== 主内容区 ========== -->
+    <main class="flex-1" style="margin-left: calc(220px + var(--eyes-spacing)); padding: var(--eyes-spacing); padding-left: 0;">
+        <div id="items-header">
+        <!-- Header -->
+        <div id="page-header" class="flex justify-between items-center mb-4">
+            <div>
+                <h2 style="font-size: var(--eyes-font-size-lg); font-weight: var(--eyes-font-weight-medium); color: var(--eyes-text-primary);">服务健康监控</h2>
+                <p style="font-size: var(--eyes-font-size-base); color: var(--eyes-text-disabled); margin-top: 4px;" id="last-check-time">上次检查: --</p>
+            </div>
+            <div class="flex gap-2">
+                <button class="e-btn e-btn-primary" onclick="scanAndCheck()">
+                    🔍 扫描服务
+                </button>
+            </div>
+        </div>
+        
+        <!-- 统计数据 -->
+        <div class="flex gap-4 mb-4" id="summary">
+            <!-- 健康度环形图卡片 -->
+            <div class="e-card" style="width: 200px;">
+                <div class="e-card-body" style="display: flex; align-items: center; gap: 16px;">
+                    <div id="health-ring"></div>
+                    <div>
+                        <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">健康度</div>
+                        <div style="font-size: var(--eyes-font-size-xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-text-primary);" id="health-percent">-</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 服务统计 -->
+            <div class="e-card" style="flex: 1;">
+                <div class="e-card-body">
+                    <div class="flex gap-6">
+                        <div>
+                            <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">监控项</div>
+                            <div style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-text-primary);" id="total-count">-</div>
+                        </div>
+                        <div>
+                            <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">正常</div>
+                            <div style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-success);" id="passed-count">-</div>
+                        </div>
+                        <div>
+                            <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">异常</div>
+                            <div style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-danger);" id="failed-count">-</div>
+                        </div>
+                        <div style="flex: 1;"></div>
+                        <div id="type-stats" style="display: flex; gap: 16px; align-items: center;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+        
+        <!-- ========== 监控项页 ========== -->
+        <div id="tab-items" class="tab-content">
+            <div id="items-container" class="flex flex-col gap-3.5"></div>
+        </div>
+        
+        <!-- ========== 设置页 ========== -->
+        <div id="tab-settings" class="tab-content hidden">
+            <div class="grid grid-cols-2 gap-3.5">
+                <!-- Bark -->
+                <div class="e-card">
+                    <div class="e-card-header">
+                        <div class="e-card-title">🔔 Bark 推送</div>
+                        <div id="bark-switch"></div>
+                    </div>
+                    <div class="e-card-body">
+                        <div class="flex flex-col gap-3">
+                            <div class="form-group">
+                                <label class="form-label">Device Key</label>
+                                <input type="text" class="e-input" id="bark-key" placeholder="输入 Bark Device Key">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">服务器地址</label>
+                                <input type="text" class="e-input" id="bark-server" placeholder="https://api.day.app">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">推送分组</label>
+                                <input type="text" class="e-input" id="bark-group" placeholder="Dev">
+                            </div>
+                            <button class="e-btn e-btn-sm e-btn-secondary" onclick="testBark()">测试推送</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 邮件 -->
+                <div class="e-card">
+                    <div class="e-card-header">
+                        <div class="e-card-title">📧 邮件通知</div>
+                        <div id="email-switch"></div>
+                    </div>
+                    <div class="e-card-body">
+                        <div class="flex flex-col gap-3">
+                            <div class="form-group">
+                                <label class="form-label">发件人</label>
+                                <input type="email" class="e-input" id="email-from" placeholder="alert@example.com">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">收件人</label>
+                                <input type="email" class="e-input" id="email-to" placeholder="admin@example.com">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="form-group">
+                                    <label class="form-label">SMTP 服务器</label>
+                                    <input type="text" class="e-input" id="smtp-host" placeholder="smtp.example.com">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">端口</label>
+                                    <input type="number" class="e-input" id="smtp-port" placeholder="25">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <div id="smtp-ssl-checkbox"></div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">SMTP 用户名</label>
+                                <input type="text" class="e-input" id="smtp-user" placeholder="用户名">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">SMTP 密码</label>
+                                <input type="password" class="e-input" id="smtp-password" placeholder="密码">
+                            </div>
+                            <button class="e-btn e-btn-sm e-btn-secondary" onclick="testEmail()">测试邮件</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Agent -->
+            <div class="e-card mt-4">
+                <div class="e-card-header">
+                    <div class="e-card-title">🔗 宿主机 Agent</div>
+                </div>
+                <div class="e-card-body">
+                    <div class="flex items-end gap-3">
+                        <div class="form-group flex-1">
+                            <label class="form-label">Agent 地址</label>
+                            <input type="text" class="e-input" id="agent-url" placeholder="http://host.docker.internal:9091">
+                        </div>
+                        <button class="e-btn e-btn-sm e-btn-secondary" onclick="testAgent()">测试连接</button>
+                    </div>
+                    <p class="text-sm text-muted mt-2">宿主机运行 eyes-agent，用于获取 Systemd 服务和 Cron 任务信息</p>
+                </div>
+            </div>
+            
+            <!-- Web 访问 -->
+            <div class="e-card mt-4">
+                <div class="e-card-header">
+                    <div class="e-card-title">🔒 Web 访问</div>
+                </div>
+                <div class="e-card-body">
+                    <div class="flex items-end gap-3">
+                        <div class="form-group flex-1">
+                            <label class="form-label">登录密码</label>
+                            <input type="password" class="e-input" id="web-password" placeholder="设置登录密码">
+                        </div>
+                        <button class="e-btn e-btn-primary" onclick="saveSettings()">保存所有设置</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- 弹窗 -->
+<div id="modal-container"></div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .nav-link {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 0 10px 14px;
+        border-radius: var(--eyes-radius);
+        color: var(--eyes-text-muted);
+        text-decoration: none;
+        font-size: var(--eyes-font-size-md);
+        font-weight: var(--eyes-font-weight-normal);
+        transition: all var(--eyes-transition);
+        cursor: pointer;
+    }
+    .nav-link:hover {
+        background: var(--eyes-bg-card-hover);
+        color: var(--eyes-text-secondary);
+    }
+    .nav-link.active {
+        background: var(--eyes-bg-card-hover);
+        color: var(--eyes-text-primary);
+        font-weight: var(--eyes-font-weight-medium);
+    }
+    
+    .form-group {
+        margin-bottom: 0;
+    }
+    .form-label {
+        display: block;
+        font-size: var(--eyes-font-size-base);
+        font-weight: var(--eyes-font-weight-medium);
+        color: var(--eyes-text-secondary);
+        margin-bottom: var(--eyes-spacing-xs);
+    }
+    
+    .tab-content { display: block; }
+    .tab-content.hidden { display: none; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ========== 状态变量 ==========
+let allResults = [];
+let allItems = [];
+
+// ========== Tab 切换 ==========
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.getElementById('tab-' + tabName).classList.remove('hidden');
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.toggle('active', link.dataset.tab === tabName);
+    });
+    const itemsHeader = document.getElementById('items-header');
+    if (itemsHeader) {
+        itemsHeader.style.display = tabName === 'items' ? '' : 'none';
+    }
+    if (tabName === 'items') loadItems();
+    if (tabName === 'settings') loadSettings();
+}
+
+// ========== 扫描并检查 ==========
+function scanAndCheck() {
+    EyesUI.toast('正在扫描服务并执行检查...', 'info');
+    fetch('/api/scan', { method: 'POST' })
+        .then(r => r.json())
+        .then(scanData => {
+            return fetch('/api/check', { method: 'POST' })
+                .then(r => r.json())
+                .then(checkData => {
+                    const scanMsg = scanData.added > 0 ? `新增${scanData.added}项, ` : '';
+                    EyesUI.toast(`扫描完成: ${scanMsg}${checkData.passed}/${checkData.total}通过`, 
+                                 checkData.failed > 0 ? 'error' : 'success');
+                    loadItems();
+                });
+        });
+}
+
+// ========== 加载监控项 ==========
+function loadItems() {
+    // 同时加载监控项和检查结果
+    Promise.all([
+        fetch('/api/items').then(r => r.json()),
+        fetch('/api/results').then(r => r.json())
+    ]).then(([items, results]) => {
+        allItems = items;
+        allResults = results;
+        renderItemsByType();
+        updateSummary();
+    });
+}
+
+function updateSummary() {
+    const total = allItems.length;
+    const passed = allResults.filter(r => r.ok).length;
+    const failed = allResults.filter(r => !r.ok).length;
+    const health = total > 0 ? Math.round((passed / total) * 100) : 0;
+    
+    document.getElementById('total-count').textContent = total;
+    document.getElementById('passed-count').textContent = passed;
+    document.getElementById('failed-count').textContent = failed;
+    
+    const healthEl = document.getElementById('health-percent');
+    healthEl.textContent = health + '%';
+    healthEl.style.color = failed === 0 ? 'var(--eyes-success)' : 'var(--eyes-danger)';
+    
+    // 渲染环形图
+    document.getElementById('health-ring').innerHTML = EyesUI.RingChart({
+        value: passed,
+        total: total,
+        size: 80,
+        strokeWidth: 6,
+        label: ''
+    });
+    
+    // 渲染类型统计
+    const typeCounts = {};
+    allItems.forEach(item => {
+        typeCounts[item.type] = (typeCounts[item.type] || 0) + 1;
+    });
+    
+    const typeNames = {
+        'docker': 'Docker',
+        'systemd': 'Systemd',
+        'crond': 'Cron'
+    };
+    
+    const typeColors = {
+        'docker': '#3b82f6',
+        'systemd': '#8b5cf6',
+        'crond': '#f59e0b'
+    };
+    
+    document.getElementById('type-stats').innerHTML = Object.entries(typeCounts)
+        .filter(([type]) => ['docker', 'systemd', 'crond'].includes(type))
+        .map(([type, count]) => `
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 8px; height: 8px; border-radius: 2px; background: ${typeColors[type]};"></span>
+                <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">${typeNames[type] || type}</span>
+                <span style="font-size: var(--eyes-font-size-sm); font-weight: 600; color: var(--eyes-text-primary);">${count}</span>
+            </div>
+        `).join('');
+}
+
+// 监控项分页状态
+const itemsPagination = {};
+
+function renderItemsByType() {
+    const container = document.getElementById('items-container');
+    
+    // 按类型分组
+    const grouped = {};
+    allItems.forEach(item => {
+        if (!grouped[item.type]) grouped[item.type] = [];
+        grouped[item.type].push(item);
+    });
+    
+    const typeNames = {
+        'docker': 'Docker 容器',
+        'systemd': 'Systemd 服务',
+        'crond': 'Cron 任务',
+        'http': 'HTTP 端点',
+        'port': '端口监听',
+        'command': '自定义命令'
+    };
+    
+    // 渲染单个卡片
+    function renderCard(type, items) {
+        const enabledCount = items.filter(i => i.enabled).length;
+        const pageSize = 10;
+        
+        // 初始化分页状态
+        if (!itemsPagination[type]) {
+            itemsPagination[type] = { page: 1, search: '' };
+        }
+        
+        // 搜索过滤
+        let filteredItems = items;
+        const searchTerm = itemsPagination[type].search.toLowerCase();
+        if (searchTerm) {
+            filteredItems = items.filter(item => 
+                item.name.toLowerCase().includes(searchTerm) || 
+                item.target.toLowerCase().includes(searchTerm)
+            );
+        }
+        
+        // 分页
+        const totalPages = Math.ceil(filteredItems.length / pageSize);
+        const currentPage = Math.min(itemsPagination[type].page, totalPages || 1);
+        const start = (currentPage - 1) * pageSize;
+        const pageItems = filteredItems.slice(start, start + pageSize);
+        
+        return `
+            <div class="e-card" style="flex: 1;">
+                <div class="e-card-header">
+                    <div class="e-card-title">${typeNames[type] || type}</div>
+                    <div class="flex items-center gap-3">
+                        <input type="text" class="e-input" style="width: 140px; padding: 4px 8px; font-size: 12px;" 
+                               placeholder="搜索..." 
+                               value="${itemsPagination[type].search}"
+                               oninput="searchItems('${type}', this.value)">
+                        <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">
+                            ${enabledCount}/${items.length}
+                        </div>
+                    </div>
+                </div>
+                <div class="e-card-body">
+                    <div class="e-list">
+                        ${pageItems.map(item => {
+                            // 查找健康状态
+                            const result = allResults.find(r => r.item_id === item.id);
+                            const isHealthy = result ? !!result.ok : null;
+                            const detail = result ? result.detail : '';
+                            
+                            // 解析运行时间和描述
+                            let uptime = '';
+                            let desc = item.target; // 默认用 target 作为描述
+                            
+                            if (detail) {
+                                // 提取外层括号内容，例如: running (Up 2 hours (healthy))
+                                const outerMatch = detail.match(/(?:running|Up)\s*\((.+)\)\s*$/i);
+                                if (outerMatch) {
+                                    const inner = outerMatch[1]; // Up 2 hours (healthy)
+                                    // 从括号内容中提取运行时间（支持嵌套）
+                                    const timeMatch = inner.match(/Up\s+([\d]+\s*\w+.*?)(?:\s*\(|$)/);
+                                    if (timeMatch) uptime = timeMatch[1].trim();
+                                }
+                                
+                                // 提取描述：移除所有括号内容（包括嵌套）
+                                desc = detail
+                                    .replace(/\s*\([^()]*\)/g, '')
+                                    .trim() || item.target;
+                            }
+                            
+                            return `
+                            <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--eyes-border);">
+                                <span style="width: 6px; height: 6px; border-radius: 50%; background: ${isHealthy === true ? 'var(--eyes-success)' : isHealthy === false ? 'var(--eyes-danger)' : 'var(--eyes-text-muted)'}; flex-shrink: 0;"></span>
+                                <div style="flex: 1; min-width: 0;">
+                                    <div style="font-size: var(--eyes-font-size-md); color: var(--eyes-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.name}</div>
+                                </div>
+                                <div style="width: 140px; font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;">${desc}</div>
+                                <div style="width: 80px; font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted); text-align: right; flex-shrink: 0;">${uptime || '-'}</div>
+                            </div>
+                            `;
+                        }).join('')}
+                    </div>
+                    ${totalPages > 1 ? `
+                        <div class="flex justify-between items-center mt-2" style="padding-top: var(--eyes-spacing-xs); border-top: 1px solid var(--eyes-border);">
+                            <div style="font-size: var(--eyes-font-size-xs); color: var(--eyes-text-muted);">
+                                ${filteredItems.length} 项
+                            </div>
+                            <div class="flex gap-1 items-center">
+                                <button class="e-btn e-btn-sm e-btn-ghost" onclick="goItemsPage('${type}', ${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>‹</button>
+                                <span style="font-size: var(--eyes-font-size-xs); color: var(--eyes-text-muted);">
+                                    ${currentPage}/${totalPages}
+                                </span>
+                                <button class="e-btn e-btn-sm e-btn-ghost" onclick="goItemsPage('${type}', ${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>›</button>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
+    
+    // Docker 和 Systemd 并排
+    const dockerItems = grouped['docker'];
+    const systemdItems = grouped['systemd'];
+    
+    let html = '';
+    
+    if (dockerItems && systemdItems) {
+        html += `
+            <div class="flex gap-3.5">
+                ${renderCard('docker', dockerItems)}
+                ${renderCard('systemd', systemdItems)}
+            </div>
+        `;
+    } else if (dockerItems) {
+        html += renderCard('docker', dockerItems);
+    } else if (systemdItems) {
+        html += renderCard('systemd', systemdItems);
+    }
+    
+    // Cron 任务和资源监控并排
+    const crondItems = grouped['crond'];
+    
+    if (crondItems && crondItems.length > 0) {
+        html += `
+            <div class="flex gap-3.5">
+                ${renderCard('crond', crondItems)}
+                <div class="e-card" style="flex: 1;">
+                    <div class="e-card-header">
+                        <div class="e-card-title">资源监控</div>
+                        <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadSystemStats()">刷新</button>
+                    </div>
+                    <div class="e-card-body">
+                        <div id="system-stats" class="flex flex-col gap-3">
+                            <div style="text-align: center; color: var(--eyes-text-muted); padding: 20px;">加载中...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // 其他类型
+    ['http', 'port', 'command'].forEach(type => {
+        const items = grouped[type];
+        if (items && items.length > 0) {
+            html += renderCard(type, items);
+        }
+    });
+    
+    container.innerHTML = html || '<div style="text-align:center;padding:40px;color:var(--eyes-text-muted)">暂无监控项，点击"扫描服务"开始</div>';
+    
+    // 加载系统资源
+    if (crondItems && crondItems.length > 0) {
+        loadSystemStats();
+    }
+}
+
+function loadSystemStats() {
+    fetch('/api/system-stats')
+        .then(r => r.json())
+        .then(stats => {
+            const container = document.getElementById('system-stats');
+            if (!container) return;
+            
+            const cpuColor = stats.cpu > 80 ? 'var(--eyes-danger)' : stats.cpu > 60 ? 'var(--eyes-warning)' : 'var(--eyes-success)';
+            const memColor = stats.memory > 80 ? 'var(--eyes-danger)' : stats.memory > 60 ? 'var(--eyes-warning)' : 'var(--eyes-success)';
+            const diskColor = stats.disk > 80 ? 'var(--eyes-danger)' : stats.disk > 60 ? 'var(--eyes-warning)' : 'var(--eyes-success)';
+            
+            container.innerHTML = `
+                <div class="flex flex-col gap-3">
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">CPU</span>
+                            <span style="font-size: var(--eyes-font-size-sm); color: ${cpuColor}; font-weight: 600;">${stats.cpu}%</span>
+                        </div>
+                        <div style="height: 6px; background: var(--eyes-bg-input); border-radius: 3px; overflow: hidden;">
+                            <div style="height: 100%; width: ${stats.cpu}%; background: ${cpuColor}; border-radius: 3px; transition: width 0.3s ease;"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">内存</span>
+                            <span style="font-size: var(--eyes-font-size-sm); color: ${memColor}; font-weight: 600;">${stats.memory}% (${stats.memory_used}/${stats.memory_total})</span>
+                        </div>
+                        <div style="height: 6px; background: var(--eyes-bg-input); border-radius: 3px; overflow: hidden;">
+                            <div style="height: 100%; width: ${stats.memory}%; background: ${memColor}; border-radius: 3px; transition: width 0.3s ease;"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">硬盘</span>
+                            <span style="font-size: var(--eyes-font-size-sm); color: ${diskColor}; font-weight: 600;">${stats.disk}% (${stats.disk_used}/${stats.disk_total})</span>
+                        </div>
+                        <div style="height: 6px; background: var(--eyes-bg-input); border-radius: 3px; overflow: hidden;">
+                            <div style="height: 100%; width: ${stats.disk}%; background: ${diskColor}; border-radius: 3px; transition: width 0.3s ease;"></div>
+                        </div>
+                    </div>
+                    
+                    <div style="padding-top: var(--eyes-spacing-xs); border-top: 1px solid var(--eyes-border);">
+                        <div style="font-size: var(--eyes-font-size-xs); color: var(--eyes-text-muted);">
+                            运行时间: ${stats.uptime || 'unknown'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .catch(() => {
+            const container = document.getElementById('system-stats');
+            if (container) {
+                container.innerHTML = '<div style="text-align: center; color: var(--eyes-danger); padding: 20px;">加载失败</div>';
+            }
+        });
+}
+
+function searchItems(type, value) {
+    itemsPagination[type].search = value;
+    itemsPagination[type].page = 1;
+    renderItemsByType();
+}
+
+function goItemsPage(type, page) {
+    itemsPagination[type].page = page;
+    renderItemsByType();
+}
+
+// ========== 监控项操作 ==========
+function showAddItemModal() {
+    document.getElementById('modal-container').innerHTML = EyesUI.Modal({
+        id: 'add-item-modal',
+        title: '添加监控项',
+        body: `
+            <div class="flex flex-col gap-3">
+                <div class="form-group">
+                    <label class="form-label">类型</label>
+                    <select class="e-select" id="item-type">
+                        <option value="docker">Docker 容器</option>
+                        <option value="systemd">Systemd 服务</option>
+                        <option value="http">HTTP 端点</option>
+                        <option value="port">端口监听</option>
+                        <option value="command">自定义命令</option>
+                        <option value="crond">Cron 任务</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">名称</label>
+                    <input type="text" class="e-input" id="item-name" placeholder="显示名称">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">目标</label>
+                    <input type="text" class="e-input" id="item-target" placeholder="容器名/服务名/URL/端口号">
+                </div>
+            </div>
+        `,
+        footer: `
+            <button class="e-btn e-btn-secondary" onclick="EyesUI.closeModal('add-item-modal')">取消</button>
+            <button class="e-btn e-btn-primary" onclick="addItem()">添加</button>
+        `
+    });
+    EyesUI.showModal('add-item-modal');
+}
+
+function addItem() {
+    fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            type: document.getElementById('item-type').value,
+            name: document.getElementById('item-name').value,
+            target: document.getElementById('item-target').value
+        })
+    })
+    .then(r => r.json())
+    .then(() => {
+        EyesUI.closeModal('add-item-modal');
+        loadItems();
+        EyesUI.toast('监控项已添加', 'success');
+    });
+}
+
+function editItem(id, name, target) {
+    document.getElementById('modal-container').innerHTML = EyesUI.Modal({
+        id: 'edit-item-modal',
+        title: '编辑监控项',
+        body: `
+            <div class="flex flex-col gap-3">
+                <div class="form-group">
+                    <label class="form-label">名称</label>
+                    <input type="text" class="e-input" id="edit-item-name" value="${name}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">目标</label>
+                    <input type="text" class="e-input" id="edit-item-target" value="${target}">
+                </div>
+            </div>
+        `,
+        footer: `
+            <button class="e-btn e-btn-secondary" onclick="EyesUI.closeModal('edit-item-modal')">取消</button>
+            <button class="e-btn e-btn-primary" onclick="updateItem(${id})">保存</button>
+        `
+    });
+    EyesUI.showModal('edit-item-modal');
+}
+
+function updateItem(id) {
+    fetch(`/api/items/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            name: document.getElementById('edit-item-name').value,
+            target: document.getElementById('edit-item-target').value
+        })
+    })
+    .then(r => r.json())
+    .then(() => {
+        EyesUI.closeModal('edit-item-modal');
+        loadItems();
+        EyesUI.toast('监控项已更新', 'success');
+    });
+}
+
+function deleteItem(id) {
+    if (!confirm('确定要删除这个监控项吗？')) return;
+    fetch(`/api/items/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(() => { loadItems(); EyesUI.toast('监控项已删除', 'success'); });
+}
+
+function toggleItem(id, enabled) {
+    fetch(`/api/items/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+    })
+    .then(r => r.json())
+    .then(() => { loadItems(); EyesUI.toast(enabled ? '已启用' : '已禁用', 'success'); });
+}
+
+// ========== 设置 ==========
+function loadSettings() {
+    fetch('/api/settings')
+        .then(r => r.json())
+        .then(s => {
+            document.getElementById('bark-switch').innerHTML = EyesUI.Switch({ id: 'bark-enabled', checked: s.bark_enabled === '1' });
+            document.getElementById('bark-key').value = s.bark_key || '';
+            document.getElementById('bark-server').value = s.bark_server || '';
+            document.getElementById('bark-group').value = s.bark_group || '';
+            document.getElementById('email-switch').innerHTML = EyesUI.Switch({ id: 'email-enabled', checked: s.email_enabled === '1' });
+            document.getElementById('email-from').value = s.email_from || '';
+            document.getElementById('email-to').value = s.email_to || '';
+            document.getElementById('smtp-host').value = s.smtp_host || '';
+            document.getElementById('smtp-port').value = s.smtp_port || '';
+            document.getElementById('smtp-ssl-checkbox').innerHTML = EyesUI.Checkbox({ id: 'smtp-ssl', label: '使用 SSL', checked: s.smtp_ssl === '1' });
+            document.getElementById('smtp-user').value = s.smtp_user || '';
+            document.getElementById('smtp-password').value = s.smtp_password || '';
+            document.getElementById('web-password').value = s.web_password || '';
+            document.getElementById('agent-url').value = s.agent_url || '';
+        });
+}
+
+function saveSettings() {
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            bark_enabled: document.getElementById('bark-enabled').classList.contains('active') ? '1' : '0',
+            bark_key: document.getElementById('bark-key').value,
+            bark_server: document.getElementById('bark-server').value,
+            bark_group: document.getElementById('bark-group').value,
+            email_enabled: document.getElementById('email-enabled').classList.contains('active') ? '1' : '0',
+            email_from: document.getElementById('email-from').value,
+            email_to: document.getElementById('email-to').value,
+            smtp_host: document.getElementById('smtp-host').value,
+            smtp_port: document.getElementById('smtp-port').value,
+            smtp_ssl: document.getElementById('smtp-ssl').checked ? '1' : '0',
+            smtp_user: document.getElementById('smtp-user').value,
+            smtp_password: document.getElementById('smtp-password').value,
+            web_password: document.getElementById('web-password').value,
+            agent_url: document.getElementById('agent-url').value,
+        })
+    })
+    .then(r => r.json())
+    .then(() => EyesUI.toast('设置已保存', 'success'));
+}
+
+function testBark() {
+    fetch('/api/test-bark', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => EyesUI.toast(d.success ? '测试推送已发送' : '推送失败', d.success ? 'success' : 'error'));
+}
+
+function testEmail() {
+    fetch('/api/test-email', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => EyesUI.toast(d.success ? '测试邮件已发送' : (d.error || '发送失败'), d.success ? 'success' : 'error'));
+}
+
+function testAgent() {
+    const url = document.getElementById('agent-url').value;
+    if (!url) { EyesUI.toast('请输入 Agent 地址', 'error'); return; }
+    EyesUI.toast('正在测试连接...', 'info');
+    fetch(url + '/api/info')
+        .then(r => r.json())
+        .then(d => EyesUI.toast(d.hostname ? `连接成功: ${d.hostname}` : '连接失败', d.hostname ? 'success' : 'error'))
+        .catch(() => EyesUI.toast('连接失败', 'error'));
+}
+
+// 初始化
+loadItems();
+</script>
+{% endblock %}

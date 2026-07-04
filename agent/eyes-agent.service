@@ -1,0 +1,13 @@
+[Unit]
+Description=Eyes Agent - 轻量级系统监控代理
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /home/zhuqin/star/infra/eyes/agent/eyes-agent.py --port 9091
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

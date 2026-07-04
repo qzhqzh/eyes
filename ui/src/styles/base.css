@@ -1,0 +1,97 @@
+/* =====================================================
+   Eyes UI — Base Styles
+   ===================================================== */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--eyes-font-family);
+  font-size: var(--eyes-font-size-md);
+  line-height: var(--eyes-line-height-normal);
+  color: var(--eyes-text-secondary);
+  background-color: var(--eyes-bg-page);
+  min-height: 100vh;
+}
+
+a {
+  color: var(--eyes-primary);
+  text-decoration: none;
+  transition: color var(--eyes-transition-fast);
+}
+
+a:hover {
+  color: var(--eyes-primary-hover);
+}
+
+img, video {
+  max-width: 100%;
+  height: auto;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+ul, ol {
+  list-style: none;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--eyes-font-weight-medium);
+  color: var(--eyes-text-primary);
+  line-height: var(--eyes-line-height-tight);
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--eyes-border);
+  border-radius: var(--eyes-radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--eyes-border-hover);
+}
+
+/* 选中文本 */
+::selection {
+  background-color: var(--eyes-primary);
+  color: white;
+}
+
+/* 焦点样式 */
+:focus-visible {
+  outline: 2px solid var(--eyes-primary);
+  outline-offset: 2px;
+}
+
+/* 禁用状态 */
+[disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

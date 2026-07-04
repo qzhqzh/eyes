@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  eyes-web:
+    build: .
+    container_name: eyes-web
+    restart: unless-stopped
+    ports:
+      - "8090:5000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data
+      - ./eyes.db:/app/eyes.db
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /home/zhuqin/star/gateway/nginx/conf.d:/nginx-conf.d:ro
+    environment:
+      - TZ=Asia/Shanghai
+    networks:
+      - eyes-net
+
+networks:
+  eyes-net:
+    name: eyes-net

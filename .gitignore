@@ -4,6 +4,10 @@ config.yaml
 # 自动生成的文件（由 --sync 生成）
 conf.d/_nginx_*.yaml
 
+# 数据库文件
+eyes.db
+data/
+
 # Python
 __pycache__/
 *.pyc
