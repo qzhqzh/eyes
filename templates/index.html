@@ -524,6 +524,13 @@ function loadItems() {
             }
         })
         .catch(() => {});
+    
+    // 如果有趋势卡片，加载历史数据渲染
+    setTimeout(() => {
+        if (document.getElementById('trend-cpu') && document.getElementById('trend-cpu').clientWidth > 0) {
+            loadResourceTrend(true);
+        }
+    }, 100);
 }
 
 function updateSummary() {
@@ -699,66 +706,82 @@ function renderItemsByType() {
         `;
     }
     
+    // ========== 渲染紧凑资源状态 ==========
+    function renderCompactStatus() {
+        return `\
+            <div class="e-card" style="width: 320px; flex-shrink: 0;">
+                <div class="e-card-header">
+                    <div class="e-card-title">资源状态</div>
+                    <div class="flex items-center gap-2">
+                        <select class="e-select" style="width: 72px; padding: 2px 6px; font-size: 11px;" id="collect-interval" onchange="updateCollectInterval(this.value)">
+                            <option value="1">1分钟</option>
+                            <option value="5" selected>5分钟</option>
+                            <option value="10">10分钟</option>
+                            <option value="30">30分钟</option>
+                        </select>
+                        <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadSystemStatsAndTrend()" style="padding: 2px 6px;">刷新</button>
+                    </div>
+                </div>
+                <div class="e-card-body">
+                    <div id="system-stats" class="flex flex-col gap-2"></div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // ========== 渲染单个趋势卡片 ==========
+    function renderTrendCard(title, svgId, color) {
+        return `\
+            <div class="e-card" style="flex: 1;">
+                <div class="e-card-header">
+                    <div class="e-card-title" style="color: ${color};">${title}</div>
+                    <div style="font-size: 11px; color: var(--eyes-text-muted);" id="${svgId}-value">-</div>
+                </div>
+                <div class="e-card-body" style="padding: var(--eyes-spacing-sm) var(--eyes-spacing-sm) 4px;">
+                    <div style="height: 130px; position: relative;">
+                        <svg id="${svgId}" width="100%" height="100%" style="overflow: visible;"></svg>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
     // Docker 和 Systemd 并排
     const dockerItems = grouped['docker'];
     const systemdItems = grouped['systemd'];
     
     let html = '';
     
-    if (dockerItems && systemdItems) {
-        html += `
-            <div class="flex gap-3.5">
-                ${renderCard('docker', dockerItems)}
-                ${renderCard('systemd', systemdItems)}
-            </div>
-        `;
-    } else if (dockerItems) {
-        html += renderCard('docker', dockerItems);
-    } else if (systemdItems) {
-        html += renderCard('systemd', systemdItems);
+    // 第一行：Docker / Systemd + 紧凑资源状态
+    const row1Cards = [];
+    if (dockerItems) row1Cards.push(renderCard('docker', dockerItems));
+    if (systemdItems) row1Cards.push(renderCard('systemd', systemdItems));
+    
+    if (row1Cards.length > 0 || crondItems) {
+        row1Cards.push(renderCompactStatus());
     }
     
-    // Cron 任务和资源监控并排
-    const crondItems = grouped['crond'];
+    if (row1Cards.length > 0) {
+        html += `<div class="flex gap-3.5">${row1Cards.join('')}</div>`;
+    }
     
-    if (crondItems && crondItems.length > 0) {
-        html += `\
+    // 趋势卡片（2x2）
+    html += `\
+        <div id="trend-cards-container" class="flex flex-col gap-3.5" style="margin-top: var(--eyes-spacing-xs);">
             <div class="flex gap-3.5">
-                ${renderCard('crond', crondItems)}
-                <div class="e-card" style="flex: 1;">
-                    <div class="e-card-header">
-                        <div class="e-card-title">资源监控</div>
-                        <div class="flex items-center gap-2">
-                            <select class="e-select" style="width: 80px; padding: 2px 6px; font-size: 11px;" id="collect-interval" onchange="updateCollectInterval(this.value)">
-                                <option value="1">1分钟</option>
-                                <option value="5" selected>5分钟</option>
-                                <option value="10">10分钟</option>
-                                <option value="30">30分钟</option>
-                            </select>
-                            <button class="e-btn e-btn-sm e-btn-outline" onclick="loadResourceTrend()">趋势</button>
-                            <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadSystemStats()">刷新</button>
-                        </div>
-                    </div>
-                    <div class="e-card-body">
-                        <div id="system-stats" class="flex flex-col gap-3">
-                            <div style="text-align: center; color: var(--eyes-text-muted); padding: 20px;">加载中...</div>
-                        </div>
-                        <div id="trend-chart" style="margin-top: 16px; display: none;">
-                            <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted); margin-bottom: 8px;">资源趋势（24h）</div>
-                            <div id="chart-container" style="height: 200px; position: relative;">
-                                <svg id="trend-svg" width="100%" height="100%" style="overflow: visible;"></svg>
-                            </div>
-                            <div class="flex gap-4 mt-2" style="font-size: 11px;">
-                                <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #6366f1;"></span>CPU</span>
-                                <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>内存</span>
-                                <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f59e0b;"></span>硬盘</span>
-                                <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #ef4444;"></span>NAS</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                ${renderTrendCard('CPU', 'trend-cpu', '#6366f1')}
+                ${renderTrendCard('内存', 'trend-memory', '#10b981')}
             </div>
-        `;
+            <div class="flex gap-3.5">
+                ${renderTrendCard('硬盘', 'trend-disk', '#f59e0b')}
+                ${renderTrendCard('NAS', 'trend-nas', '#ef4444')}
+            </div>
+        </div>
+    `;
+    
+    // Cron 任务（如果有）
+    if (crondItems && crondItems.length > 0) {
+        html += renderCard('crond', crondItems);
     }
     
     // 其他类型
@@ -771,10 +794,8 @@ function renderItemsByType() {
     
     container.innerHTML = html || '<div style="text-align:center;padding:40px;color:var(--eyes-text-muted)">暂无监控项，点击"扫描服务"开始</div>';
     
-    // 加载系统资源
-    if (crondItems && crondItems.length > 0) {
-        loadSystemStats();
-    }
+    // 加载系统资源（只要有紧凑状态就加载）
+    if (document.getElementById('system-stats')) loadSystemStats();
 }
 
 function loadSystemStats() {
@@ -791,61 +812,69 @@ function loadSystemStats() {
             const nasColor = nasPercent > 80 ? 'var(--eyes-danger)' : nasPercent > 60 ? 'var(--eyes-warning)' : 'var(--eyes-success)';
             
             container.innerHTML = `\
-                <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-2">
                     <div>
                         <div class="flex justify-between mb-1">
-                            <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">CPU</span>
-                            <span style="font-size: var(--eyes-font-size-sm); color: ${cpuColor}; font-weight: 600;">${stats.cpu}%</span>
+                            <span style="font-size: 11px; color: var(--eyes-text-muted);">CPU</span>
+                            <span style="font-size: 11px; color: ${cpuColor}; font-weight: 600;">${stats.cpu}%</span>
                         </div>
-                        <div style="height: 6px; background: var(--eyes-bg-input); border-radius: 3px; overflow: hidden;">
-                            <div style="height: 100%; width: ${stats.cpu}%; background: ${cpuColor}; border-radius: 3px; transition: width 0.3s ease;"></div>
+                        <div style="height: 4px; background: var(--eyes-bg-input); border-radius: 2px; overflow: hidden;">
+                            <div style="height: 100%; width: ${stats.cpu}%; background: ${cpuColor}; border-radius: 2px; transition: width 0.3s ease;"></div>
                         </div>
                     </div>
                     
                     <div>
                         <div class="flex justify-between mb-1">
-                            <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">内存</span>
-                            <span style="font-size: var(--eyes-font-size-sm); color: ${memColor}; font-weight: 600;">${stats.memory}% (${stats.memory_used}/${stats.memory_total})</span>
+                            <span style="font-size: 11px; color: var(--eyes-text-muted);">内存</span>
+                            <span style="font-size: 11px; color: ${memColor}; font-weight: 600;">${stats.memory}%</span>
                         </div>
-                        <div style="height: 6px; background: var(--eyes-bg-input); border-radius: 3px; overflow: hidden;">
-                            <div style="height: 100%; width: ${stats.memory}%; background: ${memColor}; border-radius: 3px; transition: width 0.3s ease;"></div>
+                        <div style="height: 4px; background: var(--eyes-bg-input); border-radius: 2px; overflow: hidden;">
+                            <div style="height: 100%; width: ${stats.memory}%; background: ${memColor}; border-radius: 2px; transition: width 0.3s ease;"></div>
                         </div>
                     </div>
                     
                     <div>
                         <div class="flex justify-between mb-1">
-                            <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">硬盘</span>
-                            <span style="font-size: var(--eyes-font-size-sm); color: ${diskColor}; font-weight: 600;">${stats.disk}% (${stats.disk_used}/${stats.disk_total})</span>
+                            <span style="font-size: 11px; color: var(--eyes-text-muted);">硬盘</span>
+                            <span style="font-size: 11px; color: ${diskColor}; font-weight: 600;">${stats.disk}%</span>
                         </div>
-                        <div style="height: 6px; background: var(--eyes-bg-input); border-radius: 3px; overflow: hidden;">
-                            <div style="height: 100%; width: ${stats.disk}%; background: ${diskColor}; border-radius: 3px; transition: width 0.3s ease;"></div>
+                        <div style="height: 4px; background: var(--eyes-bg-input); border-radius: 2px; overflow: hidden;">
+                            <div style="height: 100%; width: ${stats.disk}%; background: ${diskColor}; border-radius: 2px; transition: width 0.3s ease;"></div>
                         </div>
                     </div>
                     
-                    ${stats.nas !== undefined && stats.nas >= 0 ? `\
+                    ${(stats.nas || 0) >= 0 ? `\
                     <div>
                         <div class="flex justify-between mb-1">
-                            <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">NAS</span>
-                            <span style="font-size: var(--eyes-font-size-sm); color: ${nasColor}; font-weight: 600;">${nasPercent}% (${stats.nas_used}/${stats.nas_total})</span>
+                            <span style="font-size: 11px; color: var(--eyes-text-muted);">NAS</span>
+                            <span style="font-size: 11px; color: ${nasColor}; font-weight: 600;">${nasPercent}%</span>
                         </div>
-                        <div style="height: 6px; background: var(--eyes-bg-input); border-radius: 3px; overflow: hidden;">
-                            <div style="height: 100%; width: ${nasPercent}%; background: ${nasColor}; border-radius: 3px; transition: width 0.3s ease;"></div>
+                        <div style="height: 4px; background: var(--eyes-bg-input); border-radius: 2px; overflow: hidden;">
+                            <div style="height: 100%; width: ${nasPercent}%; background: ${nasColor}; border-radius: 2px; transition: width 0.3s ease;"></div>
                         </div>
                     </div>
                     ` : ''}
                     
-                    <div style="padding-top: var(--eyes-spacing-xs); border-top: 1px solid var(--eyes-border);">
-                        <div style="font-size: var(--eyes-font-size-xs); color: var(--eyes-text-muted);">
-                            运行时间: ${stats.uptime || 'unknown'}
-                        </div>
+                    <div style="padding-top: var(--eyes-spacing-2xs); border-top: 1px solid var(--eyes-border);">
+                        <div style="font-size: 10px; color: var(--eyes-text-muted);">运行 ${stats.uptime || 'unknown'}</div>
                     </div>
                 </div>
             `;
+            
+            // 同步更新趋势卡片的当前值
+            const cpuVal = document.getElementById('trend-cpu-value');
+            const memVal = document.getElementById('trend-memory-value');
+            const diskVal = document.getElementById('trend-disk-value');
+            const nasVal = document.getElementById('trend-nas-value');
+            if (cpuVal) cpuVal.textContent = stats.cpu + '%';
+            if (memVal) memVal.textContent = stats.memory + '%';
+            if (diskVal) diskVal.textContent = stats.disk + '%';
+            if (nasVal) nasVal.textContent = nasPercent + '%';
         })
         .catch(() => {
             const container = document.getElementById('system-stats');
             if (container) {
-                container.innerHTML = '<div style="text-align: center; color: var(--eyes-danger); padding: 20px;">加载失败</div>';
+                container.innerHTML = '<div style="text-align: center; color: var(--eyes-danger); padding: 12px;">加载失败</div>';
             }
         });
 }
@@ -862,76 +891,115 @@ function goItemsPage(type, page) {
 }
 
 // ========== 资源趋势图 ==========
-function loadResourceTrend() {
-    const trendDiv = document.getElementById('trend-chart');
-    if (!trendDiv) return;
+function loadResourceTrend(show) {
+    const trendCardsContainer = document.getElementById('trend-cards-container');
+    if (!trendCardsContainer) return;
     
-    if (trendDiv.style.display === 'none') {
-        trendDiv.style.display = 'block';
-        fetch('/api/resource-metrics?hours=24')
-            .then(r => r.json())
-            .then(metrics => renderTrendChart(metrics))
-            .catch(err => console.error('Load trend error:', err));
-    } else {
-        trendDiv.style.display = 'none';
+    // 默认展开
+    if (show !== false) {
+        trendCardsContainer.style.display = '';
     }
+    
+    fetch('/api/resource-metrics?hours=24')
+        .then(r => r.json())
+        .then(metrics => {
+            if (!metrics || metrics.length < 2) return;
+            // 延迟渲染等 DOM 尺寸就绪
+            setTimeout(() => {
+                renderMiniChart('trend-cpu', metrics, 'cpu', '#6366f1');
+                renderMiniChart('trend-memory', metrics, 'memory', '#10b981');
+                renderMiniChart('trend-disk', metrics, 'disk', '#f59e0b');
+                const hasNas = metrics.some(m => m.nas !== null && m.nas !== undefined);
+                if (hasNas) renderMiniChart('trend-nas', metrics, 'nas', '#ef4444');
+            }, 50);
+        })
+        .catch(err => console.error('Load trend error:', err));
 }
 
-function renderTrendChart(metrics) {
-    const svg = document.getElementById('trend-svg');
-    if (!svg || !metrics || metrics.length === 0) return;
+function loadSystemStatsAndTrend() {
+    loadSystemStats();
+    loadResourceTrend();
+}
+
+function renderMiniChart(svgId, metrics, key, color) {
+    const svg = document.getElementById(svgId);
+    if (!svg) return;
     
-    const width = svg.clientWidth || 600;
-    const height = svg.clientHeight || 200;
-    const padding = { top: 10, right: 10, bottom: 20, left: 30 };
+    const width = svg.clientWidth || 200;
+    const height = svg.clientHeight || 120;
+    const padding = { top: 12, right: 8, bottom: 20, left: 32 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
     
     svg.innerHTML = '';
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
     
-    // 创建数据点
-    const data = metrics.map((m, i) => ({
-        time: m.timestamp,
-        cpu: parseFloat(m.cpu) || 0,
-        memory: parseFloat(m.memory) || 0,
-        disk: parseFloat(m.disk) || 0,
-        nas: parseFloat(m.nas) || 0
-    }));
+    // 定义渐变
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+    gradient.setAttribute('id', `grad-${svgId}`);
+    gradient.setAttribute('x1', '0'); gradient.setAttribute('y1', '0');
+    gradient.setAttribute('x2', '0'); gradient.setAttribute('y2', '1');
     
+    const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+    stop1.setAttribute('offset', '0%');
+    stop1.setAttribute('stop-color', color);
+    stop1.setAttribute('stop-opacity', '0.3');
+    
+    const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+    stop2.setAttribute('offset', '100%');
+    stop2.setAttribute('stop-color', color);
+    stop2.setAttribute('stop-opacity', '0.02');
+    
+    gradient.appendChild(stop1);
+    gradient.appendChild(stop2);
+    defs.appendChild(gradient);
+    svg.appendChild(defs);
+    
+    const data = metrics.map(m => parseFloat(m[key]) || 0);
     if (data.length < 2) return;
     
-    // 绘制网格线
-    for (let i = 0; i <= 4; i++) {
-        const y = padding.top + (chartHeight * i) / 4;
-        svg.innerHTML += `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="var(--eyes-border)" stroke-width="1"/>`;
-        svg.innerHTML += `<text x="5" y="${y + 4}" fill="var(--eyes-text-muted)" font-size="11">${100 - i * 25}%</text>`;
-    }
+    const maxVal = 100;
     
-    // 绘制时间轴
-    const timeStep = Math.max(1, Math.floor(data.length / 6));
-    for (let i = 0; i < data.length; i += timeStep) {
+    // 绘制网格线（25%, 50%, 75%, 100%）
+    [25, 50, 75, 100].forEach((v, i) => {
+        const y = padding.top + chartHeight - (v / maxVal) * chartHeight;
+        svg.innerHTML += `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="var(--eyes-border)" stroke-width="0.5" stroke-dasharray="3,3"/>`;
+    });
+    
+    // Y 轴标签
+    [0, 50, 100].forEach(v => {
+        const y = padding.top + chartHeight - (v / maxVal) * chartHeight;
+        svg.innerHTML += `<text x="${padding.left - 4}" y="${y + 4}" fill="var(--eyes-text-muted)" font-size="10" text-anchor="end">${v}%</text>`;
+    });
+    
+    // X 轴时间标签（取 3 个点）
+    const timeStep = Math.max(1, Math.floor(data.length / 3));
+    [0, Math.floor(data.length / 2), data.length - 1].forEach(i => {
         const x = padding.left + (i / (data.length - 1)) * chartWidth;
-        const time = new Date(data[i].time);
-        const label = `${time.getHours()}:${time.getMinutes().toString().padStart(2, '0')}`;
-        svg.innerHTML += `<text x="${x}" y="${height - 5}" fill="var(--eyes-text-muted)" font-size="11" text-anchor="middle">${label}</text>`;
-    }
+        const time = new Date(metrics[i].timestamp);
+        const label = `${time.getHours().toString().padStart(2,'0')}:${time.getMinutes().toString().padStart(2,'0')}`;
+        svg.innerHTML += `<text x="${x}" y="${height - 4}" fill="var(--eyes-text-muted)" font-size="10" text-anchor="middle">${label}</text>`;
+    });
     
-    // 绘制折线函数
-    function drawLine(data, color, key) {
-        const points = data.map((d, i) => {
-            const x = padding.left + (i / (data.length - 1)) * chartWidth;
-            const y = padding.top + chartHeight - (d[key] / 100) * chartHeight;
-            return `${x},${y}`;
-        }).join(' ');
-        
-        svg.innerHTML += `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-    }
+    // 生成路径点
+    const points = data.map((v, i) => {
+        const x = padding.left + (i / (data.length - 1)) * chartWidth;
+        const y = padding.top + chartHeight - (v / maxVal) * chartHeight;
+        return { x, y };
+    });
     
-    drawLine(data, '#6366f1', 'cpu');
-    drawLine(data, '#10b981', 'memory');
-    drawLine(data, '#f59e0b', 'disk');
-    if (metrics[0].nas !== null) drawLine(data, '#ef4444', 'nas');
+    // 面积填充（从点到 X 轴的闭合路径）
+    const areaPath = `M${points[0].x},${points[0].y} ` +
+        points.map((p, i) => i === 0 ? '' : `L${p.x},${p.y}`).join(' ') +
+        ` L${points[points.length-1].x},${padding.top + chartHeight}` +
+        ` L${points[0].x},${padding.top + chartHeight} Z`;
+    
+    svg.innerHTML += `<path d="${areaPath}" fill="url(#grad-${svgId})"/>`;
+    
+    // 折线
+    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+    svg.innerHTML += `<path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
 }
 
 function updateCollectInterval(minutes) {
