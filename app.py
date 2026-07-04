@@ -3,11 +3,15 @@
 
 import os
 import functools
+import subprocess
+import re
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from apscheduler.schedulers.background import BackgroundScheduler
 from models import (
     init_db, init_default_settings, get_setting, set_setting, get_all_settings,
-    get_check_items, add_check_item, update_check_item, delete_check_item,
-    save_check_result, get_check_results, clear_check_results, import_from_yaml
+    get_check_items, get_all_check_items, add_check_item, update_check_item, delete_check_item,
+    update_item_status, save_check_result, get_check_results, clear_check_results, import_from_yaml,
+    save_resource_metrics, get_resource_metrics, clear_old_metrics
 )
 from checker import run_check, run_all_checks
 from bark import send_bark_alert, send_bark_recovery
@@ -23,6 +27,127 @@ init_default_settings()
 
 # 配置目录
 CONF_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "conf.d")
+
+
+def collect_stats():
+    """采集系统资源并保存"""
+    stats = {}
+    
+    # CPU 使用率
+    try:
+        r = subprocess.run(
+            "top -bn1 | grep 'Cpu(s)'",
+            capture_output=True, text=True, shell=True, timeout=5
+        )
+        if r.returncode == 0 and r.stdout:
+            match = re.search(r'(\d+\.?\d*)\s*id', r.stdout)
+            if match:
+                idle = float(match.group(1))
+                stats['cpu'] = round(100 - idle, 1)
+            else:
+                stats['cpu'] = -1
+        else:
+            stats['cpu'] = -1
+    except Exception as e:
+        print(f"CPU error: {e}")
+        stats['cpu'] = -1
+    
+    # 内存使用率
+    try:
+        r = subprocess.run(
+            "free -m | grep Mem",
+            capture_output=True, text=True, shell=True, timeout=5
+        )
+        if r.returncode == 0 and r.stdout:
+            parts = r.stdout.split()
+            if len(parts) >= 3:
+                total = int(parts[1])
+                used = int(parts[2])
+                stats['memory'] = round(used / total * 100, 1)
+                stats['memory_used'] = f"{used}MB"
+                stats['memory_total'] = f"{total}MB"
+            else:
+                stats['memory'] = -1
+        else:
+            stats['memory'] = -1
+    except Exception as e:
+        print(f"Memory error: {e}")
+        stats['memory'] = -1
+    
+    # 硬盘使用率
+    try:
+        r = subprocess.run(
+            ["df", "-h", "/"],
+            capture_output=True, text=True, timeout=5
+        )
+        if r.returncode == 0:
+            lines = r.stdout.strip().split("\n")
+            if len(lines) >= 2:
+                parts = lines[1].split()
+                if len(parts) >= 5:
+                    stats['disk'] = parts[4].replace('%', '')
+                    stats['disk_used'] = parts[2]
+                    stats['disk_total'] = parts[1]
+                else:
+                    stats['disk'] = -1
+            else:
+                stats['disk'] = -1
+        else:
+            stats['disk'] = -1
+    except Exception as e:
+        print(f"Disk error: {e}")
+        stats['disk'] = -1
+    
+    # NAS 盘使用率
+    try:
+        r = subprocess.run(
+            ["df", "-h", "/mnt/nas"],
+            capture_output=True, text=True, timeout=5
+        )
+        if r.returncode == 0:
+            lines = r.stdout.strip().split("\n")
+            if len(lines) >= 2:
+                parts = lines[1].split()
+                if len(parts) >= 5:
+                    stats['nas'] = parts[4].replace('%', '')
+                    stats['nas_used'] = parts[2]
+                    stats['nas_total'] = parts[1]
+                else:
+                    stats['nas'] = -1
+            else:
+                stats['nas'] = -1
+        else:
+            stats['nas'] = -1
+    except Exception as e:
+        print(f"NAS error: {e}")
+        stats['nas'] = -1
+    
+    # 保存到数据库
+    try:
+        save_resource_metrics(
+            stats.get('cpu', -1),
+            stats.get('memory', -1),
+            stats.get('disk', -1),
+            stats.get('nas', -1),
+            stats.get('memory_used', ''),
+            stats.get('memory_total', ''),
+            stats.get('disk_used', ''),
+            stats.get('disk_total', ''),
+            stats.get('nas_used', ''),
+            stats.get('nas_total', '')
+        )
+    except Exception as e:
+        print(f"Save metrics error: {e}")
+    
+    return stats
+
+
+# 启动定时任务调度器
+scheduler = BackgroundScheduler()
+interval = int(get_setting("resource_collect_interval", "300"))
+scheduler.add_job(id='collect_resource_metrics', func=collect_stats, trigger='interval', seconds=interval, replace_existing=True)
+scheduler.add_job(id='clear_old_metrics', func=clear_old_metrics, trigger='interval', hours=24)
+scheduler.start()
 
 
 def login_required(f):
@@ -102,6 +227,9 @@ def update_settings():
 def list_items():
     """获取监控项列表"""
     item_type = request.args.get("type")
+    include_deprecated = request.args.get("include_deprecated") == "1"
+    if include_deprecated:
+        return jsonify(get_all_check_items(item_type))
     return jsonify(get_check_items(item_type))
 
 
@@ -123,6 +251,15 @@ def update_item(item_id):
                      name=data.get("name"),
                      target=data.get("target"),
                      enabled=data.get("enabled"))
+    return jsonify({"success": True})
+
+
+@app.route("/api/items/<int:item_id>/status", methods=["PUT"])
+@login_required
+def change_item_status(item_id):
+    """更新监控项状态（active/deprecated）"""
+    data = request.json
+    update_item_status(item_id, data.get("status", "active"))
     return jsonify({"success": True})
 
 
@@ -236,62 +373,8 @@ def test_bark():
 @app.route("/api/system-stats", methods=["GET"])
 @login_required
 def system_stats():
-    """获取系统资源统计"""
-    import subprocess
-    import re
-    
-    stats = {}
-    
-    # CPU 使用率
-    try:
-        r = subprocess.run(
-            "top -bn1 | grep 'Cpu(s)'",
-            capture_output=True, text=True, shell=True, timeout=5
-        )
-        if r.returncode == 0 and r.stdout:
-            match = re.search(r'(\d+\.?\d*)\s*id', r.stdout)
-            if match:
-                idle = float(match.group(1))
-                stats['cpu'] = round(100 - idle, 1)
-    except Exception as e:
-        print(f"CPU error: {e}")
-        stats['cpu'] = -1
-    
-    # 内存使用率
-    try:
-        r = subprocess.run(
-            "free -m | grep Mem",
-            capture_output=True, text=True, shell=True, timeout=5
-        )
-        if r.returncode == 0 and r.stdout:
-            parts = r.stdout.split()
-            if len(parts) >= 3:
-                total = int(parts[1])
-                used = int(parts[2])
-                stats['memory'] = round(used / total * 100, 1)
-                stats['memory_used'] = f"{used}MB"
-                stats['memory_total'] = f"{total}MB"
-    except Exception as e:
-        print(f"Memory error: {e}")
-        stats['memory'] = -1
-    
-    # 硬盘使用率
-    try:
-        r = subprocess.run(
-            ["df", "-h", "/"],
-            capture_output=True, text=True, timeout=5
-        )
-        if r.returncode == 0:
-            lines = r.stdout.strip().split("\n")
-            if len(lines) >= 2:
-                parts = lines[1].split()
-                if len(parts) >= 5:
-                    stats['disk'] = parts[4].replace('%', '')
-                    stats['disk_used'] = parts[2]
-                    stats['disk_total'] = parts[1]
-    except Exception as e:
-        print(f"Disk error: {e}")
-        stats['disk'] = -1
+    """获取系统资源统计（实时）"""
+    stats = collect_stats()
     
     # 运行时间
     try:
@@ -306,6 +389,36 @@ def system_stats():
         stats['uptime'] = 'unknown'
     
     return jsonify(stats)
+
+
+@app.route("/api/resource-metrics", methods=["GET"])
+@login_required
+def resource_metrics():
+    """获取资源历史数据"""
+    hours = request.args.get('hours', 24, type=int)
+    metrics = get_resource_metrics(hours)
+    return jsonify(metrics)
+
+
+@app.route("/api/resource-collect-interval", methods=["GET", "POST"])
+@login_required
+def resource_collect_interval():
+    """获取/设置资源采集频率（分钟）"""
+    if request.method == "GET":
+        seconds = int(get_setting("resource_collect_interval", "300"))
+        return jsonify({"seconds": seconds, "minutes": seconds // 60})
+    
+    data = request.json
+    minutes = data.get('minutes', 5)
+    
+    # 更新设置
+    seconds = int(minutes) * 60
+    set_setting("resource_collect_interval", str(seconds))
+    
+    # 更新调度器
+    scheduler.reschedule_job('collect_resource_metrics', trigger='interval', seconds=seconds)
+    
+    return jsonify({"success": True, "seconds": seconds, "minutes": int(minutes)})
 
 
 @app.route("/api/test-email", methods=["POST"])

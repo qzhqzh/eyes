@@ -37,9 +37,16 @@ def init_db():
             name TEXT NOT NULL,
             target TEXT NOT NULL,  -- 容器名/unit名/URL/端口号/命令
             enabled INTEGER DEFAULT 1,
+            status TEXT DEFAULT 'active',  -- active, deprecated
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    
+    # 迁移：如果表已存在但缺少 status 字段，则添加
+    cursor.execute("PRAGMA table_info(check_items)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if 'status' not in columns:
+        cursor.execute("ALTER TABLE check_items ADD COLUMN status TEXT DEFAULT 'active'")
 
     # 检查结果表（只保留最近一次）
     cursor.execute("""
@@ -52,6 +59,24 @@ def init_db():
             detail TEXT,
             checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (item_id) REFERENCES check_items(id)
+        )
+    """)
+
+    # 资源指标历史表
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS resource_metrics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            cpu REAL,
+            memory REAL,
+            disk REAL,
+            nas REAL,
+            memory_used TEXT,
+            memory_total TEXT,
+            disk_used TEXT,
+            disk_total TEXT,
+            nas_used TEXT,
+            nas_total TEXT
         )
     """)
 
@@ -92,7 +117,20 @@ def get_all_settings():
 
 
 def get_check_items(item_type=None):
-    """获取监控项列表"""
+    """获取监控项列表（仅 active 状态）"""
+    conn = get_db()
+    cursor = conn.cursor()
+    if item_type:
+        cursor.execute("SELECT * FROM check_items WHERE type = ? AND status = 'active' ORDER BY id", (item_type,))
+    else:
+        cursor.execute("SELECT * FROM check_items WHERE status = 'active' ORDER BY type, id")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_all_check_items(item_type=None):
+    """获取所有监控项（包括 deprecated）"""
     conn = get_db()
     cursor = conn.cursor()
     if item_type:
@@ -116,6 +154,18 @@ def add_check_item(item_type, name, target):
     item_id = cursor.lastrowid
     conn.close()
     return item_id
+
+
+def update_item_status(item_id, status):
+    """更新监控项状态（active/deprecated）"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE check_items SET status = ? WHERE id = ?",
+        (status, item_id)
+    )
+    conn.commit()
+    conn.close()
 
 
 def update_check_item(item_id, name=None, target=None, enabled=None):
@@ -256,10 +306,46 @@ def init_default_settings():
         "web_password": "eyes123",
         "check_interval": "600",  # 秒，10分钟
         "agent_url": "http://host.docker.internal:9091",  # 宿主机 agent 地址
+        "resource_collect_interval": "300",  # 秒，5分钟
     }
     for key, value in defaults.items():
         if get_setting(key) is None:
             set_setting(key, value)
+
+
+def save_resource_metrics(cpu, memory, disk, nas, memory_used, memory_total, disk_used, disk_total, nas_used, nas_total):
+    """保存资源指标"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO resource_metrics (cpu, memory, disk, nas, memory_used, memory_total, disk_used, disk_total, nas_used, nas_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (cpu, memory, disk, nas, memory_used, memory_total, disk_used, disk_total, nas_used, nas_total)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_resource_metrics(hours=24):
+    """获取最近 N 小时的资源指标"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM resource_metrics WHERE timestamp >= datetime('now', '-{}' || ' hours') ORDER BY timestamp".format(hours)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def clear_old_metrics(days=7):
+    """清理 N 天前的旧数据"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM resource_metrics WHERE timestamp < date('now', '-{}' || ' days')".format(days)
+    )
+    conn.commit()
+    conn.close()
 
 
 if __name__ == "__main__":
