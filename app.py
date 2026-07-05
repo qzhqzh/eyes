@@ -19,6 +19,7 @@ from email_sender import send_email_alert, send_email_report, send_test_email
 from scanner import scan_all
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 app.secret_key = "eyes-secret-key-2026-stable"
 
 # 初始化数据库
@@ -421,6 +422,36 @@ def resource_collect_interval():
     return jsonify({"success": True, "seconds": seconds, "minutes": int(minutes)})
 
 
+@app.route("/api/network-speed", methods=["GET"])
+@login_required
+def network_speed():
+    """测试到外部目标点的 TCP 连通延迟"""
+    import socket
+    
+    targets = {
+        'google':  ('dns.google.com', 53),
+        'github':  ('github.com', 443),
+        'gpt':     ('api.openai.com', 443),
+        'youtube': ('youtube.com', 443),
+    }
+    
+    results = {}
+    for name, (host, port) in targets.items():
+        try:
+            import time
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(3)
+            t0 = time.monotonic()
+            s.connect((host, port))
+            elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
+            s.close()
+            results[name] = {'ok': True, 'ms': elapsed_ms}
+        except Exception:
+            results[name] = {'ok': False, 'ms': None}
+    
+    return jsonify(results)
+
+
 @app.route("/api/test-email", methods=["POST"])
 @login_required
 def test_email():
@@ -452,3 +483,4 @@ def test_email():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+

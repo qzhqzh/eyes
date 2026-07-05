@@ -94,25 +94,68 @@
                 </div>
             </div>
             
-            <!-- 服务统计 -->
-            <div class="e-card" style="flex: 1;">
+            <!-- 服务统计：上排数字 + 下排类型 -->
+            <div class="e-card" style="width: 320px;">
                 <div class="e-card-body">
-                    <div class="flex gap-6">
-                        <div>
-                            <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">监控项</div>
-                            <div style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-text-primary);" id="total-count">-</div>
+                    <div class="flex flex-col gap-3">
+                        <div class="flex gap-6">
+                            <div>
+                                <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">监控项</div>
+                                <div style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-text-primary);" id="total-count">-</div>
+                            </div>
+                            <div>
+                                <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">正常</div>
+                                <div style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-success);" id="passed-count">-</div>
+                            </div>
+                            <div>
+                                <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">异常</div>
+                                <div style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-danger);" id="failed-count">-</div>
+                            </div>
                         </div>
-                        <div>
-                            <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">正常</div>
-                            <div style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-success);" id="passed-count">-</div>
+                        <div style="padding-top: var(--eyes-spacing-xs); border-top: 1px solid var(--eyes-border);">
+                            <div id="type-stats" style="display: flex; gap: 16px; align-items: center;"></div>
                         </div>
-                        <div>
-                            <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">异常</div>
-                            <div style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-danger);" id="failed-count">-</div>
-                        </div>
-                        <div style="flex: 1;"></div>
-                        <div id="type-stats" style="display: flex; gap: 16px; align-items: center;"></div>
                     </div>
+                </div>
+            </div>
+            
+            <!-- 资源状态 -->
+            <div id="compact-status-card" style="width: 320px; flex-shrink: 0;">
+                <div class="e-card">
+                    <div class="e-card-header">
+                        <div class="e-card-title">资源状态</div>
+                        <div class="flex items-center gap-2">
+                            <select class="e-select" style="width: 72px; padding: 2px 6px; font-size: 11px;" id="collect-interval" onchange="updateCollectInterval(this.value)">
+                                <option value="1">1分钟</option>
+                                <option value="5" selected>5分钟</option>
+                                <option value="10">10分钟</option>
+                                <option value="30">30分钟</option>
+                            </select>
+                            <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadSystemStatsAndTrend()" style="padding: 4px;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="e-card-body">
+                        <div id="system-stats" class="flex flex-col gap-2"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 网速测试 -->
+            <div style="width: 260px; flex-shrink: 0;">
+                <div class="e-card">
+                    <div class="e-card-header">
+                        <div class="e-card-title">网速测试</div>
+                        <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadNetworkSpeed()" style="padding: 4px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="e-card-body" id="speed-list"></div>
                 </div>
             </div>
         </div> <!-- closes #summary -->
@@ -706,29 +749,6 @@ function renderItemsByType() {
         `;
     }
     
-    // ========== 渲染紧凑资源状态 ==========
-    function renderCompactStatus() {
-        return `\
-            <div class="e-card" style="width: 320px; flex-shrink: 0;">
-                <div class="e-card-header">
-                    <div class="e-card-title">资源状态</div>
-                    <div class="flex items-center gap-2">
-                        <select class="e-select" style="width: 72px; padding: 2px 6px; font-size: 11px;" id="collect-interval" onchange="updateCollectInterval(this.value)">
-                            <option value="1">1分钟</option>
-                            <option value="5" selected>5分钟</option>
-                            <option value="10">10分钟</option>
-                            <option value="30">30分钟</option>
-                        </select>
-                        <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadSystemStatsAndTrend()" style="padding: 2px 6px;">刷新</button>
-                    </div>
-                </div>
-                <div class="e-card-body">
-                    <div id="system-stats" class="flex flex-col gap-2"></div>
-                </div>
-            </div>
-        `;
-    }
-    
     // ========== 渲染单个趋势卡片 ==========
     function renderTrendCard(title, svgId, color) {
         return `\
@@ -746,28 +766,26 @@ function renderItemsByType() {
         `;
     }
     
-    // Docker 和 Systemd 并排
+    // Docker、Systemd、Cron 任务
     const dockerItems = grouped['docker'];
     const systemdItems = grouped['systemd'];
+    const crondItems = grouped['crond'];
     
     let html = '';
     
-    // 第一行：Docker / Systemd + 紧凑资源状态
+    // 服务卡片行
     const row1Cards = [];
     if (dockerItems) row1Cards.push(renderCard('docker', dockerItems));
     if (systemdItems) row1Cards.push(renderCard('systemd', systemdItems));
-    
-    if (row1Cards.length > 0 || crondItems) {
-        row1Cards.push(renderCompactStatus());
-    }
+    if (crondItems && crondItems.length > 0) row1Cards.push(renderCard('crond', crondItems));
     
     if (row1Cards.length > 0) {
         html += `<div class="flex gap-3.5">${row1Cards.join('')}</div>`;
     }
     
     // 趋势卡片（2x2）
-    html += `\
-        <div id="trend-cards-container" class="flex flex-col gap-3.5" style="margin-top: var(--eyes-spacing-xs);">
+    html += `
+        <div id="trend-cards-container" class="flex flex-col gap-3.5" style="margin-top: 14px;">
             <div class="flex gap-3.5">
                 ${renderTrendCard('CPU', 'trend-cpu', '#6366f1')}
                 ${renderTrendCard('内存', 'trend-memory', '#10b981')}
@@ -779,11 +797,6 @@ function renderItemsByType() {
         </div>
     `;
     
-    // Cron 任务（如果有）
-    if (crondItems && crondItems.length > 0) {
-        html += renderCard('crond', crondItems);
-    }
-    
     // 其他类型
     ['http', 'port', 'command'].forEach(type => {
         const items = grouped[type];
@@ -794,8 +807,11 @@ function renderItemsByType() {
     
     container.innerHTML = html || '<div style="text-align:center;padding:40px;color:var(--eyes-text-muted)">暂无监控项，点击"扫描服务"开始</div>';
     
-    // 加载系统资源（只要有紧凑状态就加载）
+    // 加载系统资源
     if (document.getElementById('system-stats')) loadSystemStats();
+    if (document.getElementById('speed-list')) loadNetworkSpeed();
+    // 加载趋势图（setTimeout 确保 innerHTML 已生效，SVG 有尺寸）
+    requestAnimationFrame(() => loadResourceTrend());
 }
 
 function loadSystemStats() {
@@ -855,9 +871,7 @@ function loadSystemStats() {
                     </div>
                     ` : ''}
                     
-                    <div style="padding-top: var(--eyes-spacing-2xs); border-top: 1px solid var(--eyes-border);">
-                        <div style="font-size: 10px; color: var(--eyes-text-muted);">运行 ${stats.uptime || 'unknown'}</div>
-                    </div>
+                    <div style="font-size: 10px; color: var(--eyes-text-muted);">运行 ${stats.uptime || 'unknown'}</div>
                 </div>
             `;
             
@@ -921,6 +935,45 @@ function loadSystemStatsAndTrend() {
     loadResourceTrend();
 }
 
+// ========== 网速测试 ==========
+const speedTargets = {
+    google:  { label: 'Google',  color: '#4285f4' },
+    github:  { label: 'GitHub',  color: '#f0f0f0' },
+    gpt:     { label: 'GPT',     color: '#10a37f' },
+    youtube: { label: 'YouTube', color: '#ff0000' },
+};
+
+function loadNetworkSpeed() {
+    const list = document.getElementById('speed-list');
+    if (!list) return;
+    list.innerHTML = '<div style="text-align:center;padding:8px;color:var(--eyes-text-muted);font-size:11px;">测试中...</div>';
+    
+    fetch('/api/network-speed')
+        .then(r => r.json())
+        .then(data => {
+            const entries = Object.entries(data);
+            if (!list) return;
+            list.innerHTML = entries.map(([key, v], i) => {
+                const t = speedTargets[key] || { label: key, color: '#888' };
+                const ok = v && v.ok;
+                const color = ok ? 'var(--eyes-success)' : 'var(--eyes-danger)';
+                const text = ok ? `${v.ms}ms` : '不可达';
+                const border = i < entries.length - 1 ? 'border-bottom:1px solid var(--eyes-border);' : '';
+                return `\
+                    <div style="display:flex;align-items:center;gap:8px;padding:5px 0;${border}">
+                        <span style="width:6px;height:6px;border-radius:50%;background:${color};flex-shrink:0;box-shadow:0 0 6px ${color}80;"></span>
+                        <span style="flex:1;font-size:12px;color:var(--eyes-text-secondary);font-weight:500;">${t.label}</span>
+                        <span style="font-size:11px;font-weight:600;color:${color};font-variant-numeric:tabular-nums;">${text}</span>
+                    </div>
+                `;
+            }).join('');
+        })
+        .catch(() => {
+            if (!list) return;
+            list.innerHTML = '<div style="text-align:center;padding:8px;color:var(--eyes-danger);font-size:11px;">请求失败</div>';
+        });
+}
+
 function renderMiniChart(svgId, metrics, key, color) {
     const svg = document.getElementById(svgId);
     if (!svg) return;
@@ -931,75 +984,64 @@ function renderMiniChart(svgId, metrics, key, color) {
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
     
-    svg.innerHTML = '';
-    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    
-    // 定义渐变
-    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
-    gradient.setAttribute('id', `grad-${svgId}`);
-    gradient.setAttribute('x1', '0'); gradient.setAttribute('y1', '0');
-    gradient.setAttribute('x2', '0'); gradient.setAttribute('y2', '1');
-    
-    const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-    stop1.setAttribute('offset', '0%');
-    stop1.setAttribute('stop-color', color);
-    stop1.setAttribute('stop-opacity', '0.3');
-    
-    const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-    stop2.setAttribute('offset', '100%');
-    stop2.setAttribute('stop-color', color);
-    stop2.setAttribute('stop-opacity', '0.02');
-    
-    gradient.appendChild(stop1);
-    gradient.appendChild(stop2);
-    defs.appendChild(gradient);
-    svg.appendChild(defs);
-    
     const data = metrics.map(m => parseFloat(m[key]) || 0);
     if (data.length < 2) return;
     
     const maxVal = 100;
     
-    // 绘制网格线（25%, 50%, 75%, 100%）
-    [25, 50, 75, 100].forEach((v, i) => {
+    // 生成坐标点
+    const points = data.map((v, i) => ({
+        x: padding.left + (i / (data.length - 1)) * chartWidth,
+        y: padding.top + chartHeight - (v / maxVal) * chartHeight
+    }));
+    
+    // 面积路径（用于渐变填充）
+    const areaPath = `M${points[0].x},${points[0].y} ` +
+        points.map(p => `L${p.x},${p.y}`).join(' ') +
+        ` L${points[points.length-1].x},${padding.top + chartHeight} L${points[0].x},${padding.top + chartHeight} Z`;
+    
+    // 折线路径
+    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+    
+    // 网格线
+    let gridLines = '';
+    [25, 50, 75, 100].forEach(v => {
         const y = padding.top + chartHeight - (v / maxVal) * chartHeight;
-        svg.innerHTML += `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="var(--eyes-border)" stroke-width="0.5" stroke-dasharray="3,3"/>`;
+        gridLines += `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="var(--eyes-border)" stroke-width="0.5" stroke-dasharray="3,3"/>`;
     });
     
     // Y 轴标签
+    let yLabels = '';
     [0, 50, 100].forEach(v => {
         const y = padding.top + chartHeight - (v / maxVal) * chartHeight;
-        svg.innerHTML += `<text x="${padding.left - 4}" y="${y + 4}" fill="var(--eyes-text-muted)" font-size="10" text-anchor="end">${v}%</text>`;
+        yLabels += `<text x="${padding.left - 4}" y="${y + 4}" fill="var(--eyes-text-muted)" font-size="10" text-anchor="end">${v}%</text>`;
     });
     
     // X 轴时间标签（取 3 个点）
-    const timeStep = Math.max(1, Math.floor(data.length / 3));
-    [0, Math.floor(data.length / 2), data.length - 1].forEach(i => {
+    let xLabels = '';
+    const labelIndices = [0, Math.floor(data.length / 2), data.length - 1];
+    labelIndices.forEach(i => {
         const x = padding.left + (i / (data.length - 1)) * chartWidth;
         const time = new Date(metrics[i].timestamp);
         const label = `${time.getHours().toString().padStart(2,'0')}:${time.getMinutes().toString().padStart(2,'0')}`;
-        svg.innerHTML += `<text x="${x}" y="${height - 4}" fill="var(--eyes-text-muted)" font-size="10" text-anchor="middle">${label}</text>`;
+        xLabels += `<text x="${x}" y="${height - 4}" fill="var(--eyes-text-muted)" font-size="10" text-anchor="middle">${label}</text>`;
     });
     
-    // 生成路径点
-    const points = data.map((v, i) => {
-        const x = padding.left + (i / (data.length - 1)) * chartWidth;
-        const y = padding.top + chartHeight - (v / maxVal) * chartHeight;
-        return { x, y };
-    });
-    
-    // 面积填充（从点到 X 轴的闭合路径）
-    const areaPath = `M${points[0].x},${points[0].y} ` +
-        points.map((p, i) => i === 0 ? '' : `L${p.x},${p.y}`).join(' ') +
-        ` L${points[points.length-1].x},${padding.top + chartHeight}` +
-        ` L${points[0].x},${padding.top + chartHeight} Z`;
-    
-    svg.innerHTML += `<path d="${areaPath}" fill="url(#grad-${svgId})"/>`;
-    
-    // 折线
-    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
-    svg.innerHTML += `<path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+    svg.innerHTML = `
+        <defs>
+            <linearGradient id="grad-${svgId}" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="${color}" stop-opacity="0.3"/>
+                <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
+            </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="transparent"/>
+        ${gridLines}
+        ${yLabels}
+        ${xLabels}
+        <path d="${areaPath}" fill="url(#grad-${svgId})" />
+        <path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    `;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
 }
 
 function updateCollectInterval(minutes) {
