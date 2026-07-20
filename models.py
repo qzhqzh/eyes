@@ -291,6 +291,41 @@ def replace_check_results(results):
         conn.close()
 
 
+def replace_check_results_for_types(results, item_types):
+    """Atomically replace latest results only for the requested item types."""
+    item_types = sorted(set(item_types))
+    if not item_types:
+        return
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("BEGIN IMMEDIATE")
+        placeholders = ",".join("?" for _ in item_types)
+        cursor.execute(
+            f"DELETE FROM check_results WHERE item_type IN ({placeholders})",
+            item_types,
+        )
+        cursor.executemany(
+            """
+            INSERT INTO check_results (item_id, item_type, item_name, ok, detail)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    result["id"], result["type"], result["name"],
+                    1 if result["ok"] else 0, result["detail"],
+                )
+                for result in results
+            ],
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def get_check_results():
     """获取所有检查结果"""
     conn = get_db()
@@ -380,8 +415,12 @@ def init_default_settings():
         "smtp_user": "",
         "smtp_password": "",
         "web_password": "",
-        "check_interval": "600",  # 秒，10分钟
-        "agent_url": "http://host.docker.internal:9091",  # 宿主机 agent 地址
+        "check_interval": "600",  # 兼容旧版全量检查设置
+        "check_interval_docker": "600",
+        "check_interval_systemd": "1800",
+        "check_interval_crond": "1800",
+        "check_interval_other": "600",
+        "agent_url": "http://127.0.0.1:9091",  # host-network 下的宿主机 agent
         "resource_collect_interval": "300",  # 秒，5分钟
     }
     for key, value in defaults.items():
@@ -411,6 +450,16 @@ def get_resource_metrics(hours=24):
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+
+def get_latest_resource_metric():
+    """Return the most recently collected resource snapshot."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM resource_metrics ORDER BY id DESC LIMIT 1")
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def clear_old_metrics(days=7):

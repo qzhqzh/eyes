@@ -484,16 +484,22 @@ async function scanAndCheck() {
         }
         if (!scanResponse.ok) throw new Error(scanData.error || '服务扫描失败');
         startScanCooldown(scanData.cooldown_seconds || 60);
-
-        const checkResponse = await fetch('/api/check', { method: 'POST' });
-        const checkData = await checkResponse.json();
-        if (!checkResponse.ok) throw new Error(checkData.error || '健康检查失败');
+        await loadItems();
+        await loadSystemStatsAndTrend(true);
+        const groupResults = [];
+        for (const group of ['docker', 'systemd', 'crond', 'other']) {
+            groupResults.push(await refreshHealthGroup(group, true));
+        }
+        const checkData = {
+            total: groupResults.reduce((sum, result) => sum + (result.total || 0), 0),
+            passed: groupResults.reduce((sum, result) => sum + (result.passed || 0), 0),
+            failed: groupResults.reduce((sum, result) => sum + (result.failed || 0), 0),
+        };
         const scanMsg = scanData.added > 0 ? `新增${scanData.added}项，` : '';
         EyesUI.toast(
             `扫描完成：${scanMsg}${checkData.passed}/${checkData.total} 通过`,
             checkData.failed > 0 ? 'error' : 'success'
         );
-        loadItems();
         loadAllItems();
         const lastCheck = document.getElementById('last-check-time');
         if (lastCheck) lastCheck.textContent = `上次检查：${formatCheckDateTime(new Date())}`;
@@ -626,7 +632,7 @@ function restoreItem(itemId) {
 // ========== 加载监控项 ==========
 function loadItems() {
     // 同时加载监控项、检查结果、上次检查时间
-    Promise.all([
+    const request = Promise.all([
         fetch('/api/items').then(r => r.json()),
         fetch('/api/results').then(r => r.json()),
         fetch('/api/last-check-time').then(r => r.json())
@@ -662,7 +668,110 @@ function loadItems() {
             loadResourceTrend(true);
         }
     }, 100);
+    return request;
 }
+
+const HEALTH_GROUP_ITEM_TYPES = {
+    docker: ['docker'],
+    systemd: ['systemd'],
+    crond: ['crond'],
+    other: ['http', 'port', 'command'],
+};
+const healthGroupIntervals = { docker: 600, systemd: 1800, crond: 1800, other: 600 };
+let healthAutoRefreshEnabled = true;
+const dashboardRefreshTimers = new Map();
+
+function dashboardIsVisible() {
+    const tab = document.getElementById('tab-items');
+    return !document.hidden && tab && !tab.classList.contains('hidden');
+}
+
+async function refreshHealthGroup(group, runCheck = false) {
+    const types = HEALTH_GROUP_ITEM_TYPES[group];
+    if (!types) throw new Error(`未知检查分组：${group}`);
+    let checkData = { total: 0, passed: 0, failed: 0 };
+    if (runCheck) {
+        let response;
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+            response = await fetch(`/api/check?group=${encodeURIComponent(group)}`, { method: 'POST' });
+            checkData = await response.json();
+            if (response.status !== 409) break;
+            await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+        if (!response.ok) throw new Error(checkData.error || `${group} 检查失败`);
+    }
+
+    const payloads = await Promise.all(types.map(async type => {
+        const [itemsResponse, resultsResponse] = await Promise.all([
+            fetch(`/api/items?type=${encodeURIComponent(type)}`),
+            fetch(`/api/results?type=${encodeURIComponent(type)}`),
+        ]);
+        if (!itemsResponse.ok || !resultsResponse.ok) throw new Error(`${type} 状态刷新失败`);
+        return { type, items: await itemsResponse.json(), results: await resultsResponse.json() };
+    }));
+
+    for (const payload of payloads) {
+        allItems = allItems.filter(item => item.type !== payload.type).concat(payload.items);
+        allResults = allResults.filter(result => result.item_type !== payload.type).concat(payload.results);
+        const card = document.getElementById(`items-card-${payload.type}`);
+        if (card && window.renderHealthCard) {
+            card.outerHTML = window.renderHealthCard(payload.type, payload.items);
+        }
+    }
+    updateSummary();
+    const lastCheck = await fetch('/api/last-check-time').then(response => response.json());
+    const lastCheckElement = document.getElementById('last-check-time');
+    if (lastCheckElement && lastCheck.time) {
+        lastCheckElement.textContent = `上次检查：${formatCheckDateTime(lastCheck.time)}`;
+    }
+    return checkData;
+}
+
+async function refreshResources(runCollect = false) {
+    await loadSystemStats(runCollect);
+    await loadResourceTrend();
+}
+
+async function setupDashboardRefreshTimers() {
+    dashboardRefreshTimers.forEach(timer => clearInterval(timer));
+    dashboardRefreshTimers.clear();
+    const intervals = await fetch('/api/check-intervals').then(response => response.json());
+    Object.assign(healthGroupIntervals, intervals);
+    healthAutoRefreshEnabled = intervals.scheduled_checks_enabled !== false;
+    if (allItems.length) renderItemsByType();
+    const schedule = (name, seconds, callback) => {
+        const timer = setInterval(() => {
+            if (dashboardIsVisible()) callback().catch(error => console.error(`${name} refresh`, error));
+        }, Math.max(60, Number(seconds)) * 1000);
+        dashboardRefreshTimers.set(name, timer);
+    };
+    schedule('resources', intervals.resources, () => refreshResources(false));
+    for (const group of Object.keys(HEALTH_GROUP_ITEM_TYPES)) {
+        schedule(group, intervals[group], () => refreshHealthGroup(group, false));
+    }
+}
+
+async function updateHealthInterval(group, minutes) {
+    const response = await fetch('/api/check-intervals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ group, minutes: Number(minutes) }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        EyesUI.toast(data.error || '更新频率失败', 'error');
+        return;
+    }
+    healthGroupIntervals[group] = data.seconds;
+    await setupDashboardRefreshTimers();
+    EyesUI.toast(`${group} 更新频率已设为 ${minutes} 分钟`, 'success');
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (!dashboardIsVisible()) return;
+    refreshResources(false).catch(() => {});
+    Object.keys(HEALTH_GROUP_ITEM_TYPES).forEach(group => refreshHealthGroup(group, false).catch(() => {}));
+});
 
 function updateSummary() {
     const total = allItems.length;
@@ -742,6 +851,8 @@ function renderItemsByType() {
     function renderCard(type, items) {
         const enabledCount = items.filter(i => i.enabled).length;
         const pageSize = 5;
+        const configurableInterval = ['docker', 'systemd', 'crond'].includes(type);
+        const intervalMinutes = Math.round((healthGroupIntervals[type] || 600) / 60);
         
         // 初始化分页状态
         if (!itemsPagination[type]) {
@@ -765,10 +876,15 @@ function renderItemsByType() {
         const pageItems = filteredItems.slice(start, start + pageSize);
         
         return `
-            <div class="e-card" style="flex: 1;">
+            <div class="e-card" id="items-card-${type}" data-health-group="${type}" style="flex: 1;">
                 <div class="e-card-header">
                     <div class="e-card-title">${typeNames[type] || type}</div>
                     <div class="flex items-center gap-3">
+                        ${configurableInterval ? `
+                        <select class="e-select" aria-label="${typeNames[type]}自动更新频率" style="width: 82px; padding: 3px 5px; font-size: 10px;" onchange="updateHealthInterval('${type}', this.value)" ${healthAutoRefreshEnabled ? '' : 'disabled'}>
+                            ${[5, 10, 30, 60].map(minutes => `<option value="${minutes}" ${minutes === intervalMinutes ? 'selected' : ''}>${minutes}分钟</option>`).join('')}
+                        </select>
+                        ${healthAutoRefreshEnabled ? '' : '<span style="font-size:10px;color:var(--eyes-warning);">自动检查未启用</span>'}` : ''}
                         <input type="text" class="e-input" style="width: 140px; padding: 4px 8px; font-size: 12px;" 
                                placeholder="搜索..." 
                                value="${itemsPagination[type].search}"
@@ -836,6 +952,7 @@ function renderItemsByType() {
             </div>
         `;
     }
+    window.renderHealthCard = renderCard;
     
     // ========== 渲染单个趋势卡片 ==========
     function renderTrendCard(title, svgId, color) {
@@ -920,8 +1037,9 @@ function renderItemsByType() {
     requestAnimationFrame(() => loadResourceTrend());
 }
 
-function loadSystemStats() {
-    fetch('/api/system-stats')
+function loadSystemStats(runCollect = false) {
+    const path = runCollect ? '/api/system-stats' : '/api/system-stats/latest';
+    return fetch(path, { method: runCollect ? 'POST' : 'GET' })
         .then(r => r.json())
         .then(stats => {
             const container = document.getElementById('system-stats');
@@ -930,7 +1048,8 @@ function loadSystemStats() {
             const cpuColor = stats.cpu > 80 ? 'var(--eyes-danger)' : stats.cpu > 60 ? 'var(--eyes-warning)' : 'var(--eyes-success)';
             const memColor = stats.memory > 80 ? 'var(--eyes-danger)' : stats.memory > 60 ? 'var(--eyes-warning)' : 'var(--eyes-success)';
             const diskColor = stats.disk > 80 ? 'var(--eyes-danger)' : stats.disk > 60 ? 'var(--eyes-warning)' : 'var(--eyes-success)';
-            const nasPercent = parseInt(stats.nas) || 0;
+            const nasAvailable = Number(stats.nas) >= 0;
+            const nasPercent = nasAvailable ? Number(stats.nas) : null;
             const nasColor = nasPercent > 80 ? 'var(--eyes-danger)' : nasPercent > 60 ? 'var(--eyes-warning)' : 'var(--eyes-success)';
             
             container.innerHTML = `\
@@ -965,7 +1084,7 @@ function loadSystemStats() {
                         </div>
                     </div>
                     
-                    ${(stats.nas || 0) >= 0 ? `\
+                    ${nasAvailable ? `\
                     <div>
                         <div class="flex justify-between mb-1">
                             <span style="font-size: 11px; color: var(--eyes-text-muted);">NAS</span>
@@ -975,7 +1094,10 @@ function loadSystemStats() {
                             <div style="height: 100%; width: ${nasPercent}%; background: ${nasColor}; border-radius: 2px; transition: width 0.3s ease;"></div>
                         </div>
                     </div>
-                    ` : ''}
+                    ` : `\
+                    <div class="flex justify-between" style="font-size: 11px; color: var(--eyes-text-muted);">
+                        <span>NAS</span><span>未挂载</span>
+                    </div>`}
                     
                     <div style="font-size: 10px; color: var(--eyes-text-muted);">运行 ${stats.uptime || 'unknown'}</div>
                 </div>
@@ -989,7 +1111,7 @@ function loadSystemStats() {
             if (cpuVal) cpuVal.textContent = stats.cpu + '%';
             if (memVal) memVal.textContent = stats.memory + '%';
             if (diskVal) diskVal.textContent = stats.disk + '%';
-            if (nasVal) nasVal.textContent = nasPercent + '%';
+            if (nasVal) nasVal.textContent = nasAvailable ? nasPercent + '%' : '未挂载';
         })
         .catch(() => {
             const container = document.getElementById('system-stats');
@@ -1020,7 +1142,7 @@ function loadResourceTrend(show) {
         trendCardsContainer.style.display = '';
     }
     
-    fetch('/api/resource-metrics?hours=24')
+    return fetch('/api/resource-metrics?hours=24')
         .then(r => r.json())
         .then(metrics => {
             if (!metrics || metrics.length < 2) return;
@@ -1029,16 +1151,15 @@ function loadResourceTrend(show) {
                 renderMiniChart('trend-cpu', metrics, 'cpu', '#6366f1');
                 renderMiniChart('trend-memory', metrics, 'memory', '#10b981');
                 renderMiniChart('trend-disk', metrics, 'disk', '#f59e0b');
-                const hasNas = metrics.some(m => m.nas !== null && m.nas !== undefined);
+                const hasNas = metrics.some(m => Number(m.nas) >= 0);
                 if (hasNas) renderMiniChart('trend-nas', metrics, 'nas', '#ef4444');
             }, 50);
         })
         .catch(err => console.error('Load trend error:', err));
 }
 
-function loadSystemStatsAndTrend() {
-    loadSystemStats();
-    loadResourceTrend();
+function loadSystemStatsAndTrend(runCollect = true) {
+    return refreshResources(runCollect);
 }
 
 // ========== WireGuard 状态 ==========
@@ -1121,6 +1242,7 @@ function loadNetworkSpeed() {
 function renderMiniChart(svgId, metrics, key, color) {
     const svg = document.getElementById(svgId);
     if (!svg) return;
+    const validMetrics = metrics.filter(metric => Number(metric[key]) >= 0);
     
     const width = svg.clientWidth || 200;
     const height = svg.clientHeight || 120;
@@ -1128,7 +1250,7 @@ function renderMiniChart(svgId, metrics, key, color) {
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
     
-    const data = metrics.map(m => parseFloat(m[key]) || 0);
+    const data = validMetrics.map(metric => Number(metric[key]));
     if (data.length < 2) return;
     
     const maxVal = 100;
@@ -1166,7 +1288,7 @@ function renderMiniChart(svgId, metrics, key, color) {
     const labelIndices = [0, Math.floor(data.length / 2), data.length - 1];
     labelIndices.forEach(i => {
         const x = padding.left + (i / (data.length - 1)) * chartWidth;
-        const time = new Date(metrics[i].timestamp);
+        const time = new Date(validMetrics[i].timestamp.replace(' ', 'T') + 'Z');
         const label = `${time.getHours().toString().padStart(2,'0')}:${time.getMinutes().toString().padStart(2,'0')}`;
         xLabels += `<text x="${x}" y="${height - 4}" fill="var(--eyes-text-muted)" font-size="10" text-anchor="middle">${label}</text>`;
     });
@@ -1197,6 +1319,7 @@ function updateCollectInterval(minutes) {
     .then(r => r.json())
     .then(() => {
         EyesUI.toast(`采集频率已更新为${minutes}分钟`, 'success');
+        setupDashboardRefreshTimers().catch(() => {});
     })
     .catch(() => {
         EyesUI.toast('更新失败', 'error');
@@ -1386,5 +1509,6 @@ function testAgent() {
 
 // 初始化
 activateTabFromHash();
+setupDashboardRefreshTimers().catch(error => console.error('refresh timer setup', error));
 </script>
 {% endblock %}

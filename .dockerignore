@@ -5,6 +5,7 @@ __pycache__
 .gitignore
 .env
 .vps
+.pve
 config.yaml
 *.md
 eyes.db

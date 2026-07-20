@@ -7,9 +7,13 @@ Eyes 当前同时保留两类观测，界面和 API 不应混用它们的统计�
 - 页面：`/`
 - 数据：旧版 `check_items`、`check_results`、`resource_metrics`
 - 作用域：当前 Hub 配置的 Docker、Systemd、Cron、HTTP、端口和命令检查
-- 执行：Web 端可手动“扫描服务”；设置 `EYES_ENABLE_SCHEDULED_CHECKS=1` 后，已配置检查项由 Hub 后台按 `check_interval` 周期执行
+- 执行：Web 端可手动“扫描服务”；设置 `EYES_ENABLE_SCHEDULED_CHECKS=1` 后，Hub 后台按组执行并只替换该组结果：资源默认 5 分钟、Docker 默认 10 分钟、Systemd/Cron 默认 30 分钟，其他检查默认 10 分钟
 
-这些检查尚未带 `node_id`，因此不能解释为整个 Fleet 的服务健康度。部署在容器中时，Docker Socket、宿主机 Agent、网络模式和挂载路径会决定 Hub 能观察到哪些宿主机资源。
+分组周期保存在 `resource_collect_interval`、`check_interval_docker`、`check_interval_systemd`、`check_interval_crond` 和 `check_interval_other`。页面只按相同周期获取最新快照并局部替换对应卡片，不会因为页面轮询额外执行检查。手动“扫描服务”会先发现新服务，再依次即时采集资源和检查各服务组。
+
+这些检查尚未带 `node_id`，因此不能解释为整个 Fleet 的服务健康度。部署在容器中时，Docker Socket、宿主机 Agent、网络模式和挂载路径会决定 Hub 能观察到哪些宿主机资源。NAS 路径通过 `EYES_NAS_PATH` 指定，并且只有其文件系统类型在 `EYES_NAS_FS_TYPES` 白名单中时才计入；普通目录不会被当成 NAS。
+
+host-network 部署应设置 `EYES_AGENT_URL=http://127.0.0.1:9091`。该环境变量优先于数据库中的旧 `agent_url`，因此升级不会依赖修改用户已有设置；bridge-network 部署可以显式改回可从容器访问的宿主机地址。
 
 如果宿主机已经通过 `cron_check.py` 或 `check.py --alert` 定时运行检查，应保持 `EYES_ENABLE_SCHEDULED_CHECKS=0`，避免重复检查和重复告警。
 
