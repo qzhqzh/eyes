@@ -31,7 +31,11 @@ assert page.status_code == 200
 assert b'eyes-sidebar' in page.data
 assert b'fleet-summary' in page.data
 assert b'href="/fleet"' in page.data
+assert b'href="/domains"' in page.data
 assert 'Fleet 节点'.encode() in page.data
+assert client.get('/domains').status_code == 200
+assert client.get('/api/domains').status_code == 200
+assert client.get('/api/domains/outside.example.com/status').status_code == 404
 assert client.get('/api/v1/fleet/summary').status_code == 200
 intervals = client.get('/api/check-intervals').get_json()
 assert intervals['resources'] == 300
