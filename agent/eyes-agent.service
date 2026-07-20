@@ -1,0 +1,22 @@
+[Unit]
+Description=Eyes Node Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+EnvironmentFile=-/etc/eyes/agent.env
+Environment=EYES_AGENT_MODE=node
+Environment=EYES_STATE_DIR=/var/lib/eyes
+StateDirectory=eyes
+ExecStart=/usr/bin/python3 /opt/eyes/agent/eyes-agent.py --mode node
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

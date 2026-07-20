@@ -1,0 +1,5 @@
+# HTTP 端点检查
+# 格式: - { name: 显示名, url: 完整URL, timeout: 秒(可选，默认5) }
+# 2xx/3xx = OK, 4xx = 警告(仍算OK), 5xx = 失败
+
+- { name: "BioWindPro", url: "https://biowindpro.qzhqzh.com", timeout: 10 }

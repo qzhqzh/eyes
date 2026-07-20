@@ -13,8 +13,6 @@
 - { name: "Inventory",       target: 5000 }
 - { name: "Converter",       target: 5173 }
 - { name: "Postgres",        target: 5432 }
-- { name: "Mihomo",          target: 7890 }
-- { name: "Mihomo",          target: 7892 }
 - { name: "Converter-BE",    target: 8000 }
 - { name: "ARP",             target: 8008 }
 - { name: "ARP",             target: 8009 }
@@ -24,7 +22,6 @@
 - { name: "ARP",             target: 8089 }
 - { name: "TTT",             target: 8091 }
 - { name: "Vaultwarden",     target: 8222 }
-- { name: "Mihomo",          target: 9090 }
 - { name: "LogWood",         target: 10000 }
 - { name: "LogWood",         target: 10001 }
 - { name: "ARP",             target: 18085 }

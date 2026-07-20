@@ -1,0 +1,15 @@
+services:
+  eyes-web:
+    build: .
+    container_name: eyes-web
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./data:/app/data
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      EYES_DB_PATH: /app/data/eyes.db
+      EYES_REQUIRE_SECURE_CONFIG: "1"
+      EYES_SECRET_KEY: ${EYES_SECRET_KEY:?set EYES_SECRET_KEY in .env}
+      EYES_WEB_PASSWORD: ${EYES_WEB_PASSWORD:?set EYES_WEB_PASSWORD in .env}
+      EYES_HUB_ENROLL_TOKEN: ${EYES_HUB_ENROLL_TOKEN:-}

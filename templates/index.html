@@ -1,0 +1,1331 @@
+{% extends "base.html" %}
+
+{% block title %}eyes — 服务健康监控{% endblock %}
+
+{% block content %}
+<div class="flex min-h-screen">
+    <!-- ========== 侧边栏 ========== -->
+    <nav class="flex flex-col" style="width: 220px; box-sizing: border-box; position: fixed; height: 100vh; padding: var(--eyes-spacing); padding-right: 0;">
+        <div class="flex items-center gap-3 px-3 mb-5">
+            <!-- eyes logo SVG -->
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--eyes-text-primary);">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+                <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <h1 style="font-size: 18px; font-weight: 600; color: var(--eyes-text-primary);">eyes</h1>
+        </div>
+        
+        <ul class="flex-1" style="list-style: none;">
+            <li class="mb-1">
+                <a class="nav-link active" onclick="switchTab('items')" data-tab="items">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+                        <line x1="8" y1="6" x2="21" y2="6"/>
+                        <line x1="8" y1="12" x2="21" y2="12"/>
+                        <line x1="8" y1="18" x2="21" y2="18"/>
+                        <line x1="3" y1="6" x2="3.01" y2="6"/>
+                        <line x1="3" y1="12" x2="3.01" y2="12"/>
+                        <line x1="3" y1="18" x2="3.01" y2="18"/>
+                    </svg>
+                    服务状态
+                </a>
+            </li>
+            <li class="mb-1">
+                <a class="nav-link" href="/fleet">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+                        <circle cx="5" cy="12" r="2"/>
+                        <circle cx="19" cy="5" r="2"/>
+                        <circle cx="19" cy="19" r="2"/>
+                        <path d="M7 12h5m2-1 3-4m-3 6 3 4"/>
+                    </svg>
+                    Fleet 节点
+                </a>
+            </li>
+            <li class="mb-1">
+                <a class="nav-link" onclick="switchTab('management')" data-tab="management">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    服务设置
+                </a>
+            </li>
+            <li class="mb-1">
+                <a class="nav-link" onclick="switchTab('settings')" data-tab="settings">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                    推送设置
+                </a>
+            </li>
+        </ul>
+        
+        <div style="margin-top: auto; padding-top: var(--eyes-spacing);">
+            <a class="nav-link" href="/logout">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                退出登录
+            </a>
+        </div>
+    </nav>
+    
+    <!-- ========== 主内容区 ========== -->
+    <main class="flex-1" style="margin-left: calc(220px + var(--eyes-spacing)); padding: var(--eyes-spacing); padding-left: 0;">
+        <!-- ========== 服务状态页 ========== -->
+        <div id="tab-items" class="tab-content">
+        <div class="flex justify-between items-center mb-4">
+            <div style="display: flex; align-items: center;">
+                <div style="font-size: var(--eyes-font-size-lg); font-weight: var(--eyes-font-weight-medium); color: var(--eyes-text-primary);">服务健康监控</div>
+                <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-disabled); margin-left: 12px;" id="last-check-time">上次检查: --</span>
+            </div>
+            <div class="flex gap-2">
+                <button class="e-btn e-btn-outline" onclick="scanAndCheck()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    扫描服务
+                </button>
+            </div>
+        </div>
+        
+        <!-- 统计数据 -->
+        <div class="flex gap-4 mb-4" id="summary">
+            <!-- 健康度环形图卡片 -->
+            <div class="e-card" style="width: 180px;">
+                <div class="e-card-body" style="display: flex; align-items: center; gap: 12px;">
+                    <div id="health-ring"></div>
+                    <div>
+                        <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">健康度</div>
+                        <div style="font-size: var(--eyes-font-size-xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-text-primary);" id="health-percent">-</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 服务统计：上排数字 + 下排类型 -->
+            <div class="e-card" style="width: 300px;">
+                <div class="e-card-body">
+                    <div class="flex flex-col gap-2">
+                        <div class="flex gap-4">
+                            <div>
+                                <div style="font-size: 11px; color: var(--eyes-text-muted);">监控项</div>
+                                <div style="font-size: var(--eyes-font-size-xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-text-primary);" id="total-count">-</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 11px; color: var(--eyes-text-muted);">正常</div>
+                                <div style="font-size: var(--eyes-font-size-xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-success);" id="passed-count">-</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 11px; color: var(--eyes-text-muted);">异常</div>
+                                <div style="font-size: var(--eyes-font-size-xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-danger);" id="failed-count">-</div>
+                            </div>
+                        </div>
+                        <div style="padding-top: var(--eyes-spacing-xs); border-top: 1px solid var(--eyes-border);">
+                            <div id="type-stats" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 资源状态 -->
+            <div id="compact-status-card" style="width: 400px; flex-shrink: 0;">
+                <div class="e-card">
+                    <div class="e-card-header">
+                        <div class="e-card-title">资源状态</div>
+                        <div class="flex items-center gap-2">
+                            <select class="e-select" style="width: 68px; padding: 2px 6px; font-size: 11px;" id="collect-interval" onchange="updateCollectInterval(this.value)">
+                                <option value="1">1分钟</option>
+                                <option value="5" selected>5分钟</option>
+                                <option value="10">10分钟</option>
+                                <option value="30">30分钟</option>
+                            </select>
+                            <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadSystemStatsAndTrend()" style="padding: 4px;">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="e-card-body">
+                        <div id="system-stats" class="flex flex-col gap-2"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 网速测试 -->
+            <div style="width: 200px; flex-shrink: 0;">
+                <div class="e-card">
+                    <div class="e-card-header">
+                        <div class="e-card-title">网速</div>
+                        <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadNetworkSpeed()" style="padding: 4px;">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="e-card-body" id="speed-list"></div>
+                </div>
+            </div>
+        </div> <!-- closes #summary -->
+        
+        <div id="items-container" class="flex flex-col gap-3.5"></div>
+        </div> <!-- closes #tab-items -->
+        
+        <!-- ========== 服务设置页 ========== -->
+        <div id="tab-management" class="tab-content hidden">
+            <div class="flex justify-between items-center mb-4">
+                <div style="font-size: var(--eyes-font-size-lg); font-weight: var(--eyes-font-weight-medium); color: var(--eyes-text-primary);">服务管理</div>
+                <div class="flex items-center gap-3">
+                    <input type="text" class="e-input" style="width: 180px; padding: 4px 8px; font-size: 12px;" 
+                           placeholder="搜索服务..." id="mgmt-search" oninput="renderManagement()">
+                    <select class="e-select" style="width: 120px; padding: 4px 8px; font-size: 12px;" id="mgmt-filter" onchange="renderManagement()">
+                        <option value="all">全部状态</option>
+                        <option value="active">活跃</option>
+                        <option value="deprecated">已废弃</option>
+                    </select>
+                </div>
+            </div>
+            <div id="management-container" class="e-card">
+                <div class="e-card-body">
+                    <div class="e-list" id="management-list">
+                        <div style="text-align: center; padding: 40px; color: var(--eyes-text-muted);">加载中...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-between items-center mt-2" id="mgmt-pagination" style="padding-top: var(--eyes-spacing-xs); border-top: 1px solid var(--eyes-border); display: none;">
+                <div style="font-size: var(--eyes-font-size-xs); color: var(--eyes-text-muted);" id="mgmt-count-info"></div>
+                <div class="flex gap-1 items-center">
+                    <button class="e-btn e-btn-sm e-btn-ghost" onclick="mgmtGoPage(-1)" id="mgmt-prev">‹</button>
+                    <span style="font-size: var(--eyes-font-size-xs); color: var(--eyes-text-muted);" id="mgmt-page-info"></span>
+                    <button class="e-btn e-btn-sm e-btn-ghost" onclick="mgmtGoPage(1)" id="mgmt-next">›</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ========== 设置页 ========== -->
+        <div id="tab-settings" class="tab-content hidden">
+            <div class="flex justify-between items-center mb-4">
+                <div style="font-size: var(--eyes-font-size-lg); font-weight: var(--eyes-font-weight-medium); color: var(--eyes-text-primary);">推送设置</div>
+                <div style="width: 80px;"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3.5">
+                <!-- Bark -->
+                <div class="e-card">
+                    <div class="e-card-header">
+                        <div class="e-card-title">                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        </svg>
+                        Bark 推送</div>
+                        <div id="bark-switch"></div>
+                    </div>
+                    <div class="e-card-body">
+                        <div class="flex flex-col gap-3">
+                            <div class="form-group">
+                                <label class="form-label">Device Key</label>
+                                <input type="text" class="e-input" id="bark-key" placeholder="输入 Bark Device Key">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">服务器地址</label>
+                                <input type="text" class="e-input" id="bark-server" placeholder="https://api.day.app">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">推送分组</label>
+                                <input type="text" class="e-input" id="bark-group" placeholder="Dev">
+                            </div>
+                            <button class="e-btn e-btn-sm e-btn-secondary" onclick="testBark()">测试推送</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 邮件 -->
+                <div class="e-card">
+                    <div class="e-card-header">
+                        <div class="e-card-title">                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="4" width="20" height="16" rx="2"/>
+                            <polyline points="22,4 12,13 2,4"/>
+                        </svg>
+                        邮件通知</div>
+                        <div id="email-switch"></div>
+                    </div>
+                    <div class="e-card-body">
+                        <div class="flex flex-col gap-3">
+                            <div class="form-group">
+                                <label class="form-label">发件人</label>
+                                <input type="email" class="e-input" id="email-from" placeholder="alert@example.com">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">收件人</label>
+                                <input type="email" class="e-input" id="email-to" placeholder="admin@example.com">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="form-group">
+                                    <label class="form-label">SMTP 服务器</label>
+                                    <input type="text" class="e-input" id="smtp-host" placeholder="smtp.example.com">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">端口</label>
+                                    <input type="number" class="e-input" id="smtp-port" placeholder="25">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <div id="smtp-ssl-checkbox"></div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">SMTP 用户名</label>
+                                <input type="text" class="e-input" id="smtp-user" placeholder="用户名">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">SMTP 密码</label>
+                                <input type="password" class="e-input" id="smtp-password" placeholder="密码">
+                            </div>
+                            <button class="e-btn e-btn-sm e-btn-secondary" onclick="testEmail()">测试邮件</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Agent -->
+            <div class="e-card mt-4">
+                <div class="e-card-header">
+                    <div class="e-card-title">                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                    </svg>
+                    宿主机 Agent</div>
+                </div>
+                <div class="e-card-body">
+                    <div class="flex items-end gap-3">
+                        <div class="form-group flex-1">
+                            <label class="form-label">Agent 地址</label>
+                            <input type="text" class="e-input" id="agent-url" placeholder="http://host.docker.internal:9091">
+                        </div>
+                        <button class="e-btn e-btn-sm e-btn-secondary" onclick="testAgent()">测试连接</button>
+                    </div>
+                    <p class="text-sm text-muted mt-2">宿主机运行 eyes-agent，用于获取 Systemd 服务和 Cron 任务信息</p>
+                </div>
+            </div>
+            
+            <!-- Web 访问 -->
+            <div class="e-card mt-4">
+                <div class="e-card-header">
+                    <div class="e-card-title">                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    Web 访问</div>
+                </div>
+                <div class="e-card-body">
+                    <div class="flex items-end gap-3">
+                        <div class="form-group flex-1">
+                            <label class="form-label">登录密码</label>
+                            <input type="password" class="e-input" id="web-password" placeholder="设置登录密码">
+                        </div>
+                        <button class="e-btn e-btn-primary" onclick="saveSettings()">保存所有设置</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- 弹窗 -->
+<div id="modal-container"></div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .nav-link {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 0 10px 14px;
+        border-radius: var(--eyes-radius);
+        color: var(--eyes-text-muted);
+        text-decoration: none;
+        font-size: var(--eyes-font-size-md);
+        font-weight: var(--eyes-font-weight-normal);
+        transition: all var(--eyes-transition);
+        cursor: pointer;
+    }
+    .nav-link:hover {
+        background: var(--eyes-bg-card-hover);
+        color: var(--eyes-text-secondary);
+    }
+    .nav-link.active {
+        background: var(--eyes-bg-card-hover);
+        color: var(--eyes-text-primary);
+        font-weight: var(--eyes-font-weight-medium);
+    }
+    
+    /* 列表左右撑到 card 内壁，分割线贯穿整行 */
+    .e-list {
+        margin: 0 calc(var(--eyes-spacing) * -1);
+    }
+    .e-list > div {
+        padding-left: var(--eyes-spacing);
+        padding-right: var(--eyes-spacing);
+    }
+    
+    .form-group {
+        margin-bottom: 0;
+    }
+    .form-label {
+        display: block;
+        font-size: var(--eyes-font-size-base);
+        font-weight: var(--eyes-font-weight-medium);
+        color: var(--eyes-text-secondary);
+        margin-bottom: var(--eyes-spacing-xs);
+    }
+    
+    .tab-content { display: block; }
+    .tab-content.hidden { display: none; }
+    
+    /* 服务管理页 */
+    .management-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px var(--eyes-spacing);
+        border-bottom: 1px solid var(--eyes-border);
+        transition: opacity var(--eyes-transition);
+    }
+    .management-item.deprecated {
+        opacity: 0.5;
+    }
+    .management-item:last-child {
+        border-bottom: none;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ========== 状态变量 ==========
+let allResults = [];
+let allItems = [];
+
+// ========== Tab 切换 ==========
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.getElementById('tab-' + tabName).classList.remove('hidden');
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.toggle('active', link.dataset.tab === tabName);
+    });
+    if (tabName === 'items') loadItems();
+    if (tabName === 'management') loadAllItems();
+    if (tabName === 'settings') loadSettings();
+}
+
+// ========== 扫描并检查 ==========
+function scanAndCheck() {
+    EyesUI.toast('正在扫描服务并执行检查...', 'info');
+    fetch('/api/scan', { method: 'POST' })
+        .then(r => r.json())
+        .then(scanData => {
+            return fetch('/api/check', { method: 'POST' })
+                .then(r => r.json())
+                .then(checkData => {
+                    const scanMsg = scanData.added > 0 ? `新增${scanData.added}项，` : '';
+                    EyesUI.toast(`扫描完成：${scanMsg}${checkData.passed}/${checkData.total} 通过`, 
+                                 checkData.failed > 0 ? 'error' : 'success');
+                    loadItems();
+                    loadAllItems();
+                    // 更新上次检查时间
+                    const now = new Date();
+                    const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+                    const el = document.getElementById('last-check-time');
+                    if (el) el.textContent = `上次检查: ${timeStr}`;
+                });
+        });
+}
+
+// ========== 加载所有服务（用于管理页） ==========
+let allManagementItems = [];
+let mgmtPage = 1;
+const mgmtPageSize = 20;
+
+function loadAllItems() {
+    mgmtPage = 1;
+    fetch('/api/items?include_deprecated=1')
+        .then(r => r.json())
+        .then(items => {
+            allManagementItems = items;
+            renderManagement();
+        });
+}
+
+function renderManagement() {
+    const container = document.getElementById('management-list');
+    const pagination = document.getElementById('mgmt-pagination');
+    const countInfo = document.getElementById('mgmt-count-info');
+    const pageInfo = document.getElementById('mgmt-page-info');
+    
+    if (!allManagementItems || allManagementItems.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--eyes-text-muted);">暂无服务，请先扫描服务</div>';
+        pagination.style.display = 'none';
+        return;
+    }
+    
+    // 搜索过滤
+    const searchTerm = (document.getElementById('mgmt-search').value || '').toLowerCase();
+    let filtered = allManagementItems.filter(item => {
+        return !searchTerm || item.name.toLowerCase().includes(searchTerm) || item.target.toLowerCase().includes(searchTerm);
+    });
+    
+    // 状态过滤
+    const filter = document.getElementById('mgmt-filter').value;
+    if (filter === 'active') {
+        filtered = filtered.filter(i => i.status === 'active' || !i.status);
+    } else if (filter === 'deprecated') {
+        filtered = filtered.filter(i => i.status === 'deprecated');
+    }
+    
+    // 统计
+    const activeCount = allManagementItems.filter(i => i.status === 'active' || !i.status).length;
+    const deprecatedCount = allManagementItems.filter(i => i.status === 'deprecated').length;
+    countInfo.textContent = `活跃 ${activeCount} · 已废弃 ${deprecatedCount} · 筛选后 ${filtered.length} 项`;
+    
+    // 分页
+    const totalPages = Math.max(1, Math.ceil(filtered.length / mgmtPageSize));
+    if (mgmtPage > totalPages) mgmtPage = totalPages;
+    const start = (mgmtPage - 1) * mgmtPageSize;
+    const pageItems = filtered.slice(start, start + mgmtPageSize);
+    
+    if (pageItems.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--eyes-text-muted);">无匹配结果</div>';
+        pagination.style.display = 'none';
+        return;
+    }
+    
+    container.innerHTML = pageItems.map(item => {
+        const isDeprecated = item.status === 'deprecated';
+        return `\
+            <div style="display: flex; align-items: center; gap: 10px; padding: 8px var(--eyes-spacing); border-bottom: 1px solid var(--eyes-border); opacity: ${isDeprecated ? 0.5 : 1};">
+                <span style="width: 6px; height: 6px; border-radius: 50%; background: ${isDeprecated ? 'var(--eyes-text-muted)' : 'var(--eyes-success)'}; flex-shrink: 0;"></span>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: var(--eyes-font-size-md); color: var(--eyes-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.name}</div>
+                </div>
+                <div style="width: 100px; font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted); flex-shrink: 0;">${item.type}</div>
+                <div style="width: 120px; font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;">${item.target}</div>
+                <div style="width: 60px; flex-shrink: 0;">
+                    ${isDeprecated 
+                        ? `<button class="e-btn e-btn-sm e-btn-outline" style="color: var(--eyes-success); border-color: var(--eyes-success);" onclick="restoreItem(${item.id})">恢复</button>`
+                        : `<button class="e-btn e-btn-sm e-btn-outline" style="color: var(--eyes-danger); border-color: var(--eyes-danger);" onclick="deprecateItem(${item.id})">废弃</button>`
+                    }
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    pageInfo.textContent = `${mgmtPage} / ${totalPages}`;
+    document.getElementById('mgmt-prev').disabled = mgmtPage <= 1;
+    document.getElementById('mgmt-next').disabled = mgmtPage >= totalPages;
+    pagination.style.display = (totalPages > 1) ? '' : 'none';
+}
+
+function mgmtGoPage(delta) {
+    mgmtPage = Math.max(1, mgmtPage + delta);
+    renderManagement();
+}
+
+function deprecateItem(itemId) {
+    fetch(`/api/items/${itemId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'deprecated' })
+    })
+    .then(r => r.json())
+    .then(() => {
+        EyesUI.toast('服务已标记为废弃', 'success');
+        loadAllItems();
+        loadItems();
+    });
+}
+
+function restoreItem(itemId) {
+    fetch(`/api/items/${itemId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' })
+    })
+    .then(r => r.json())
+    .then(() => {
+        EyesUI.toast('服务已恢复', 'success');
+        loadAllItems();
+        loadItems();
+    });
+}
+
+// ========== 加载监控项 ==========
+function loadItems() {
+    // 同时加载监控项、检查结果、上次检查时间
+    Promise.all([
+        fetch('/api/items').then(r => r.json()),
+        fetch('/api/results').then(r => r.json()),
+        fetch('/api/last-check-time').then(r => r.json())
+    ]).then(([items, results, lastCheck]) => {
+        allItems = items;
+        allResults = results;
+        
+        // 更新上次检查时间
+        console.log('lastCheck:', lastCheck);
+        if (lastCheck && lastCheck.time) {
+            // time 格式："2026-07-04 12:55:27" → 取 "12:55:27"
+            const timeStr = lastCheck.time.includes(' ') ? lastCheck.time.split(' ')[1] : lastCheck.time;
+            const el = document.getElementById('last-check-time');
+            console.log('Setting time:', timeStr, 'element:', el);
+            if (el) el.textContent = `上次检查：${timeStr}`;
+        }
+        
+        renderItemsByType();
+        updateSummary();
+    })
+    .catch(e => console.error('loadItems error:', e));
+    
+    // 加载采集频率设置
+    fetch('/api/resource-collect-interval')
+        .then(r => r.json())
+        .then(data => {
+            const select = document.getElementById('collect-interval');
+            if (select) {
+                select.value = Math.round(data.seconds / 60).toString();
+            }
+        })
+        .catch(() => {});
+    
+    // 如果有趋势卡片，加载历史数据渲染
+    setTimeout(() => {
+        if (document.getElementById('trend-cpu') && document.getElementById('trend-cpu').clientWidth > 0) {
+            loadResourceTrend(true);
+        }
+    }, 100);
+}
+
+function updateSummary() {
+    const total = allItems.length;
+    const passed = allResults.filter(r => r.ok).length;
+    const failed = allResults.filter(r => !r.ok).length;
+    const health = total > 0 ? Math.round((passed / total) * 100) : 0;
+    
+    document.getElementById('total-count').textContent = total;
+    document.getElementById('passed-count').textContent = passed;
+    document.getElementById('failed-count').textContent = failed;
+    
+    const healthEl = document.getElementById('health-percent');
+    healthEl.textContent = health + '%';
+    healthEl.style.color = failed === 0 ? 'var(--eyes-success)' : 'var(--eyes-danger)';
+    
+    // 渲染环形图
+    document.getElementById('health-ring').innerHTML = EyesUI.RingChart({
+        value: passed,
+        total: total,
+        size: 80,
+        strokeWidth: 6,
+        label: ''
+    });
+    
+    // 渲染类型统计
+    const typeCounts = {};
+    allItems.forEach(item => {
+        typeCounts[item.type] = (typeCounts[item.type] || 0) + 1;
+    });
+    
+    const typeNames = {
+        'docker': 'Docker',
+        'systemd': 'Systemd',
+        'crond': 'Cron'
+    };
+    
+    const typeColors = {
+        'docker': '#3b82f6',
+        'systemd': '#8b5cf6',
+        'crond': '#f59e0b'
+    };
+    
+    document.getElementById('type-stats').innerHTML = Object.entries(typeCounts)
+        .filter(([type]) => ['docker', 'systemd', 'crond'].includes(type))
+        .map(([type, count]) => `
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 8px; height: 8px; border-radius: 2px; background: ${typeColors[type]};"></span>
+                <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">${typeNames[type] || type}</span>
+                <span style="font-size: var(--eyes-font-size-sm); font-weight: 600; color: var(--eyes-text-primary);">${count}</span>
+            </div>
+        `).join('');
+}
+
+// 监控项分页状态
+const itemsPagination = {};
+
+function renderItemsByType() {
+    const container = document.getElementById('items-container');
+    
+    // 按类型分组
+    const grouped = {};
+    allItems.forEach(item => {
+        if (!grouped[item.type]) grouped[item.type] = [];
+        grouped[item.type].push(item);
+    });
+    
+    const typeNames = {
+        'docker': 'Docker 容器',
+        'systemd': 'Systemd 服务',
+        'crond': 'Cron 任务',
+        'http': 'HTTP 端点',
+        'port': '端口监听',
+        'command': '自定义命令'
+    };
+    
+    // 渲染单个卡片
+    function renderCard(type, items) {
+        const enabledCount = items.filter(i => i.enabled).length;
+        const pageSize = 5;
+        
+        // 初始化分页状态
+        if (!itemsPagination[type]) {
+            itemsPagination[type] = { page: 1, search: '' };
+        }
+        
+        // 搜索过滤
+        let filteredItems = items;
+        const searchTerm = itemsPagination[type].search.toLowerCase();
+        if (searchTerm) {
+            filteredItems = items.filter(item => 
+                item.name.toLowerCase().includes(searchTerm) || 
+                item.target.toLowerCase().includes(searchTerm)
+            );
+        }
+        
+        // 分页
+        const totalPages = Math.ceil(filteredItems.length / pageSize);
+        const currentPage = Math.min(itemsPagination[type].page, totalPages || 1);
+        const start = (currentPage - 1) * pageSize;
+        const pageItems = filteredItems.slice(start, start + pageSize);
+        
+        return `
+            <div class="e-card" style="flex: 1;">
+                <div class="e-card-header">
+                    <div class="e-card-title">${typeNames[type] || type}</div>
+                    <div class="flex items-center gap-3">
+                        <input type="text" class="e-input" style="width: 140px; padding: 4px 8px; font-size: 12px;" 
+                               placeholder="搜索..." 
+                               value="${itemsPagination[type].search}"
+                               oninput="searchItems('${type}', this.value)">
+                        <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">
+                            ${enabledCount}/${items.length}
+                        </div>
+                    </div>
+                </div>
+                <div class="e-card-body">
+                    <div class="e-list">
+                        ${pageItems.map(item => {
+                            // 查找健康状态
+                            const result = allResults.find(r => r.item_id === item.id);
+                            const isHealthy = result ? !!result.ok : null;
+                            const detail = result ? result.detail : '';
+                            
+                            // 解析运行时间和描述
+                            let uptime = '';
+                            let desc = item.target; // 默认用 target 作为描述
+                            
+                            if (detail) {
+                                // 提取外层括号内容，例如: running (Up 2 hours (healthy))
+                                const outerMatch = detail.match(/(?:running|Up)\s*\((.+)\)\s*$/i);
+                                if (outerMatch) {
+                                    const inner = outerMatch[1]; // Up 2 hours (healthy)
+                                    // 从括号内容中提取运行时间（支持嵌套）
+                                    const timeMatch = inner.match(/Up\s+([\d]+\s*\w+.*?)(?:\s*\(|$)/);
+                                    if (timeMatch) uptime = timeMatch[1].trim();
+                                }
+                                
+                                // 提取描述：移除所有括号内容（包括嵌套）
+                                desc = detail
+                                    .replace(/\s*\([^()]*\)/g, '')
+                                    .trim() || item.target;
+                            }
+                            
+                            return `
+                            <div style="display: flex; align-items: center; gap: 10px; padding: 8px var(--eyes-spacing); border-bottom: 1px solid var(--eyes-border);">
+                                <span style="width: 6px; height: 6px; border-radius: 50%; background: ${isHealthy === true ? 'var(--eyes-success)' : isHealthy === false ? 'var(--eyes-danger)' : 'var(--eyes-text-muted)'}; flex-shrink: 0;"></span>
+                                <div style="flex: 1; min-width: 0;">
+                                    <div style="font-size: var(--eyes-font-size-md); color: var(--eyes-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.name}</div>
+                                </div>
+                                <div style="width: 140px; font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0;">${desc}</div>
+                                <div style="width: 80px; font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted); text-align: right; flex-shrink: 0;">${uptime || '-'}</div>
+                            </div>
+                            `;
+                        }).join('')}
+                    </div>
+                    ${totalPages > 1 ? `
+                        <div class="flex justify-between items-center" style="padding-top: var(--eyes-spacing-sm);">
+                            <div style="font-size: var(--eyes-font-size-xs); color: var(--eyes-text-muted);">
+                                ${filteredItems.length} 项
+                            </div>
+                            <div class="flex gap-1 items-center">
+                                <button class="e-btn e-btn-sm e-btn-ghost" onclick="goItemsPage('${type}', ${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>‹</button>
+                                <span style="font-size: var(--eyes-font-size-xs); color: var(--eyes-text-muted);">
+                                    ${currentPage}/${totalPages}
+                                </span>
+                                <button class="e-btn e-btn-sm e-btn-ghost" onclick="goItemsPage('${type}', ${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>›</button>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
+    
+    // ========== 渲染单个趋势卡片 ==========
+    function renderTrendCard(title, svgId, color) {
+        return `\
+            <div class="e-card" style="flex: 1;">
+                <div class="e-card-header">
+                    <div class="e-card-title" style="color: ${color};">${title}</div>
+                    <div style="font-size: 11px; color: var(--eyes-text-muted);" id="${svgId}-value">-</div>
+                </div>
+                <div class="e-card-body" style="padding: var(--eyes-spacing-sm) var(--eyes-spacing-sm) 4px;">
+                    <div style="height: 130px; position: relative;">
+                        <svg id="${svgId}" width="100%" height="100%" style="overflow: visible;"></svg>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Docker、Systemd、Cron 任务
+    const dockerItems = grouped['docker'];
+    const systemdItems = grouped['systemd'];
+    const crondItems = grouped['crond'];
+    
+    let html = '';
+    
+    // 服务卡片行
+    const row1Cards = [];
+    if (dockerItems) row1Cards.push(renderCard('docker', dockerItems));
+    if (systemdItems) row1Cards.push(renderCard('systemd', systemdItems));
+    if (crondItems && crondItems.length > 0) row1Cards.push(renderCard('crond', crondItems));
+    
+    if (row1Cards.length > 0) {
+        html += `<div class="flex gap-3.5">${row1Cards.join('')}</div>`;
+    }
+    
+    // 监控项下半部分：WireGuard（独占整行）
+    html += `\
+        <div class="e-card">
+            <div class="e-card-header">
+                <div class="e-card-title">WireGuard</div>
+                <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadWgStatus()" style="padding: 4px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="e-card-body">
+                <div id="wg-list" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 16px;"></div>
+            </div>
+        </div>
+    `;
+    
+    // 趋势卡片（2x2 网格）
+    html += `
+        <div id="trend-cards-container" class="flex flex-col gap-3.5" style="margin-top: 14px;">
+            <div class="flex gap-3.5">
+                ${renderTrendCard('CPU', 'trend-cpu', '#6366f1')}
+                ${renderTrendCard('内存', 'trend-memory', '#10b981')}
+            </div>
+            <div class="flex gap-3.5">
+                ${renderTrendCard('硬盘', 'trend-disk', '#f59e0b')}
+                ${renderTrendCard('NAS', 'trend-nas', '#ef4444')}
+            </div>
+        </div>
+    `;
+    
+    // 其他类型
+    ['http', 'port', 'command'].forEach(type => {
+        const items = grouped[type];
+        if (items && items.length > 0) {
+            html += renderCard(type, items);
+        }
+    });
+    
+    container.innerHTML = html || '<div style="text-align:center;padding:40px;color:var(--eyes-text-muted)">暂无监控项，点击"扫描服务"开始</div>';
+    
+    // 加载系统资源
+    if (document.getElementById('system-stats')) loadSystemStats();
+    if (document.getElementById('speed-list')) loadNetworkSpeed();
+    if (document.getElementById('wg-list')) loadWgStatus();
+    // 加载趋势图（setTimeout 确保 innerHTML 已生效，SVG 有尺寸）
+    requestAnimationFrame(() => loadResourceTrend());
+}
+
+function loadSystemStats() {
+    fetch('/api/system-stats')
+        .then(r => r.json())
+        .then(stats => {
+            const container = document.getElementById('system-stats');
+            if (!container) return;
+            
+            const cpuColor = stats.cpu > 80 ? 'var(--eyes-danger)' : stats.cpu > 60 ? 'var(--eyes-warning)' : 'var(--eyes-success)';
+            const memColor = stats.memory > 80 ? 'var(--eyes-danger)' : stats.memory > 60 ? 'var(--eyes-warning)' : 'var(--eyes-success)';
+            const diskColor = stats.disk > 80 ? 'var(--eyes-danger)' : stats.disk > 60 ? 'var(--eyes-warning)' : 'var(--eyes-success)';
+            const nasPercent = parseInt(stats.nas) || 0;
+            const nasColor = nasPercent > 80 ? 'var(--eyes-danger)' : nasPercent > 60 ? 'var(--eyes-warning)' : 'var(--eyes-success)';
+            
+            container.innerHTML = `\
+                <div class="flex flex-col gap-2">
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span style="font-size: 11px; color: var(--eyes-text-muted);">CPU</span>
+                            <span style="font-size: 11px; color: ${cpuColor}; font-weight: 600;">${stats.cpu}%</span>
+                        </div>
+                        <div style="height: 4px; background: var(--eyes-bg-input); border-radius: 2px; overflow: hidden;">
+                            <div style="height: 100%; width: ${stats.cpu}%; background: ${cpuColor}; border-radius: 2px; transition: width 0.3s ease;"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span style="font-size: 11px; color: var(--eyes-text-muted);">内存</span>
+                            <span style="font-size: 11px; color: ${memColor}; font-weight: 600;">${stats.memory}%</span>
+                        </div>
+                        <div style="height: 4px; background: var(--eyes-bg-input); border-radius: 2px; overflow: hidden;">
+                            <div style="height: 100%; width: ${stats.memory}%; background: ${memColor}; border-radius: 2px; transition: width 0.3s ease;"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span style="font-size: 11px; color: var(--eyes-text-muted);">硬盘</span>
+                            <span style="font-size: 11px; color: ${diskColor}; font-weight: 600;">${stats.disk}%</span>
+                        </div>
+                        <div style="height: 4px; background: var(--eyes-bg-input); border-radius: 2px; overflow: hidden;">
+                            <div style="height: 100%; width: ${stats.disk}%; background: ${diskColor}; border-radius: 2px; transition: width 0.3s ease;"></div>
+                        </div>
+                    </div>
+                    
+                    ${(stats.nas || 0) >= 0 ? `\
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span style="font-size: 11px; color: var(--eyes-text-muted);">NAS</span>
+                            <span style="font-size: 11px; color: ${nasColor}; font-weight: 600;">${nasPercent}%</span>
+                        </div>
+                        <div style="height: 4px; background: var(--eyes-bg-input); border-radius: 2px; overflow: hidden;">
+                            <div style="height: 100%; width: ${nasPercent}%; background: ${nasColor}; border-radius: 2px; transition: width 0.3s ease;"></div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    <div style="font-size: 10px; color: var(--eyes-text-muted);">运行 ${stats.uptime || 'unknown'}</div>
+                </div>
+            `;
+            
+            // 同步更新趋势卡片的当前值
+            const cpuVal = document.getElementById('trend-cpu-value');
+            const memVal = document.getElementById('trend-memory-value');
+            const diskVal = document.getElementById('trend-disk-value');
+            const nasVal = document.getElementById('trend-nas-value');
+            if (cpuVal) cpuVal.textContent = stats.cpu + '%';
+            if (memVal) memVal.textContent = stats.memory + '%';
+            if (diskVal) diskVal.textContent = stats.disk + '%';
+            if (nasVal) nasVal.textContent = nasPercent + '%';
+        })
+        .catch(() => {
+            const container = document.getElementById('system-stats');
+            if (container) {
+                container.innerHTML = '<div style="text-align: center; color: var(--eyes-danger); padding: 12px;">加载失败</div>';
+            }
+        });
+}
+
+function searchItems(type, value) {
+    itemsPagination[type].search = value;
+    itemsPagination[type].page = 1;
+    renderItemsByType();
+}
+
+function goItemsPage(type, page) {
+    itemsPagination[type].page = page;
+    renderItemsByType();
+}
+
+// ========== 资源趋势图 ==========
+function loadResourceTrend(show) {
+    const trendCardsContainer = document.getElementById('trend-cards-container');
+    if (!trendCardsContainer) return;
+    
+    // 默认展开
+    if (show !== false) {
+        trendCardsContainer.style.display = '';
+    }
+    
+    fetch('/api/resource-metrics?hours=24')
+        .then(r => r.json())
+        .then(metrics => {
+            if (!metrics || metrics.length < 2) return;
+            // 延迟渲染等 DOM 尺寸就绪
+            setTimeout(() => {
+                renderMiniChart('trend-cpu', metrics, 'cpu', '#6366f1');
+                renderMiniChart('trend-memory', metrics, 'memory', '#10b981');
+                renderMiniChart('trend-disk', metrics, 'disk', '#f59e0b');
+                const hasNas = metrics.some(m => m.nas !== null && m.nas !== undefined);
+                if (hasNas) renderMiniChart('trend-nas', metrics, 'nas', '#ef4444');
+            }, 50);
+        })
+        .catch(err => console.error('Load trend error:', err));
+}
+
+function loadSystemStatsAndTrend() {
+    loadSystemStats();
+    loadResourceTrend();
+}
+
+// ========== WireGuard 状态 ==========
+function loadWgStatus() {
+    const list = document.getElementById('wg-list');
+    if (!list) return;
+    list.innerHTML = '<div style="text-align:center;padding:8px;color:var(--eyes-text-muted);font-size:11px;">检测中...</div>';
+    
+    fetch('/api/wg-status')
+        .then(r => r.json())
+        .then(data => {
+            const entries = Object.entries(data);
+            if (!list) return;
+            
+            list.innerHTML = entries.map(([key, v]) => {
+                const ok = v && v.ok;
+                const color = ok ? 'var(--eyes-success)' : 'var(--eyes-danger)';
+                
+                const fmtBytes = (b) => {
+                    if (!b) return '0';
+                    const gb = b / 1073741824;
+                    return gb >= 1 ? gb.toFixed(1) + 'GB' : (b / 1048576).toFixed(0) + 'MB';
+                };
+                const tx = v && v.tx_bytes ? fmtBytes(v.tx_bytes) : '-';
+                const rx = v && v.rx_bytes ? fmtBytes(v.rx_bytes) : '-';
+                
+                return `\
+                    <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--eyes-bg-input);border-radius:var(--eyes-radius-sm);">
+                        <span style="width:6px;height:6px;border-radius:50%;background:${color};flex-shrink:0;box-shadow:0 0 6px ${color}80;"></span>
+                        <span style="flex:1;font-size:12px;color:var(--eyes-text-secondary);font-weight:500;">${key}</span>
+                        <span style="font-size:10px;color:var(--eyes-text-muted);font-variant-numeric:tabular-nums;">↑${tx} ↓${rx}</span>
+                        <span style="font-size:10px;font-weight:600;color:${color};">${ok ? 'UP' : 'DOWN'}</span>
+                    </div>
+                `;
+            }).join('');
+        })
+        .catch(() => {
+            if (!list) return;
+            list.innerHTML = '<div style="text-align:center;padding:8px;color:var(--eyes-danger);font-size:11px;">请求失败</div>';
+        });
+}
+const speedTargets = {
+    google:  { label: 'Google',  color: '#4285f4' },
+    github:  { label: 'GitHub',  color: '#f0f0f0' },
+    gpt:     { label: 'GPT',     color: '#10a37f' },
+    youtube: { label: 'YouTube', color: '#ff0000' },
+};
+
+function loadNetworkSpeed() {
+    const list = document.getElementById('speed-list');
+    if (!list) return;
+    list.innerHTML = '<div style="text-align:center;padding:8px;color:var(--eyes-text-muted);font-size:11px;">测试中...</div>';
+    
+    fetch('/api/network-speed')
+        .then(r => r.json())
+        .then(data => {
+            const entries = Object.entries(data);
+            if (!list) return;
+            list.innerHTML = entries.map(([key, v], i) => {
+                const t = speedTargets[key] || { label: key, color: '#888' };
+                const ok = v && v.ok;
+                const color = ok ? 'var(--eyes-success)' : 'var(--eyes-danger)';
+                const text = ok ? `${v.ms}ms` : '不可达';
+                const border = i < entries.length - 1 ? 'border-bottom:1px solid var(--eyes-border);' : '';
+                return `\
+                    <div style="display:flex;align-items:center;gap:8px;padding:5px 0;${border}">
+                        <span style="width:6px;height:6px;border-radius:50%;background:${color};flex-shrink:0;box-shadow:0 0 6px ${color}80;"></span>
+                        <span style="flex:1;font-size:12px;color:var(--eyes-text-secondary);font-weight:500;">${t.label}</span>
+                        <span style="font-size:11px;font-weight:600;color:${color};font-variant-numeric:tabular-nums;">${text}</span>
+                    </div>
+                `;
+            }).join('');
+        })
+        .catch(() => {
+            if (!list) return;
+            list.innerHTML = '<div style="text-align:center;padding:8px;color:var(--eyes-danger);font-size:11px;">请求失败</div>';
+        });
+}
+
+function renderMiniChart(svgId, metrics, key, color) {
+    const svg = document.getElementById(svgId);
+    if (!svg) return;
+    
+    const width = svg.clientWidth || 200;
+    const height = svg.clientHeight || 120;
+    const padding = { top: 12, right: 8, bottom: 20, left: 32 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+    
+    const data = metrics.map(m => parseFloat(m[key]) || 0);
+    if (data.length < 2) return;
+    
+    const maxVal = 100;
+    
+    // 生成坐标点
+    const points = data.map((v, i) => ({
+        x: padding.left + (i / (data.length - 1)) * chartWidth,
+        y: padding.top + chartHeight - (v / maxVal) * chartHeight
+    }));
+    
+    // 面积路径（用于渐变填充）
+    const areaPath = `M${points[0].x},${points[0].y} ` +
+        points.map(p => `L${p.x},${p.y}`).join(' ') +
+        ` L${points[points.length-1].x},${padding.top + chartHeight} L${points[0].x},${padding.top + chartHeight} Z`;
+    
+    // 折线路径
+    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+    
+    // 网格线
+    let gridLines = '';
+    [25, 50, 75, 100].forEach(v => {
+        const y = padding.top + chartHeight - (v / maxVal) * chartHeight;
+        gridLines += `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="var(--eyes-border)" stroke-width="0.5" stroke-dasharray="3,3"/>`;
+    });
+    
+    // Y 轴标签
+    let yLabels = '';
+    [0, 50, 100].forEach(v => {
+        const y = padding.top + chartHeight - (v / maxVal) * chartHeight;
+        yLabels += `<text x="${padding.left - 4}" y="${y + 4}" fill="var(--eyes-text-muted)" font-size="10" text-anchor="end">${v}%</text>`;
+    });
+    
+    // X 轴时间标签（取 3 个点）
+    let xLabels = '';
+    const labelIndices = [0, Math.floor(data.length / 2), data.length - 1];
+    labelIndices.forEach(i => {
+        const x = padding.left + (i / (data.length - 1)) * chartWidth;
+        const time = new Date(metrics[i].timestamp);
+        const label = `${time.getHours().toString().padStart(2,'0')}:${time.getMinutes().toString().padStart(2,'0')}`;
+        xLabels += `<text x="${x}" y="${height - 4}" fill="var(--eyes-text-muted)" font-size="10" text-anchor="middle">${label}</text>`;
+    });
+    
+    svg.innerHTML = `
+        <defs>
+            <linearGradient id="grad-${svgId}" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="${color}" stop-opacity="0.3"/>
+                <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
+            </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="transparent"/>
+        ${gridLines}
+        ${yLabels}
+        ${xLabels}
+        <path d="${areaPath}" fill="url(#grad-${svgId})" />
+        <path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    `;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+}
+
+function updateCollectInterval(minutes) {
+    fetch('/api/resource-collect-interval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minutes: parseInt(minutes) })
+    })
+    .then(r => r.json())
+    .then(() => {
+        EyesUI.toast(`采集频率已更新为${minutes}分钟`, 'success');
+    })
+    .catch(() => {
+        EyesUI.toast('更新失败', 'error');
+    });
+}
+
+// ========== 监控项操作 ==========
+function showAddItemModal() {
+    document.getElementById('modal-container').innerHTML = EyesUI.Modal({
+        id: 'add-item-modal',
+        title: '添加监控项',
+        body: `
+            <div class="flex flex-col gap-3">
+                <div class="form-group">
+                    <label class="form-label">类型</label>
+                    <select class="e-select" id="item-type">
+                        <option value="docker">Docker 容器</option>
+                        <option value="systemd">Systemd 服务</option>
+                        <option value="http">HTTP 端点</option>
+                        <option value="port">端口监听</option>
+                        <option value="command">自定义命令</option>
+                        <option value="crond">Cron 任务</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">名称</label>
+                    <input type="text" class="e-input" id="item-name" placeholder="显示名称">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">目标</label>
+                    <input type="text" class="e-input" id="item-target" placeholder="容器名/服务名/URL/端口号">
+                </div>
+            </div>
+        `,
+        footer: `
+            <button class="e-btn e-btn-secondary" onclick="EyesUI.closeModal('add-item-modal')">取消</button>
+            <button class="e-btn e-btn-primary" onclick="addItem()">添加</button>
+        `
+    });
+    EyesUI.showModal('add-item-modal');
+}
+
+function addItem() {
+    fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            type: document.getElementById('item-type').value,
+            name: document.getElementById('item-name').value,
+            target: document.getElementById('item-target').value
+        })
+    })
+    .then(r => r.json())
+    .then(() => {
+        EyesUI.closeModal('add-item-modal');
+        loadItems();
+        EyesUI.toast('监控项已添加', 'success');
+    });
+}
+
+function editItem(id, name, target) {
+    document.getElementById('modal-container').innerHTML = EyesUI.Modal({
+        id: 'edit-item-modal',
+        title: '编辑监控项',
+        body: `
+            <div class="flex flex-col gap-3">
+                <div class="form-group">
+                    <label class="form-label">名称</label>
+                    <input type="text" class="e-input" id="edit-item-name" value="${name}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">目标</label>
+                    <input type="text" class="e-input" id="edit-item-target" value="${target}">
+                </div>
+            </div>
+        `,
+        footer: `
+            <button class="e-btn e-btn-secondary" onclick="EyesUI.closeModal('edit-item-modal')">取消</button>
+            <button class="e-btn e-btn-primary" onclick="updateItem(${id})">保存</button>
+        `
+    });
+    EyesUI.showModal('edit-item-modal');
+}
+
+function updateItem(id) {
+    fetch(`/api/items/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            name: document.getElementById('edit-item-name').value,
+            target: document.getElementById('edit-item-target').value
+        })
+    })
+    .then(r => r.json())
+    .then(() => {
+        EyesUI.closeModal('edit-item-modal');
+        loadItems();
+        EyesUI.toast('监控项已更新', 'success');
+    });
+}
+
+function deleteItem(id) {
+    if (!confirm('确定要删除这个监控项吗？')) return;
+    fetch(`/api/items/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(() => { loadItems(); EyesUI.toast('监控项已删除', 'success'); });
+}
+
+function toggleItem(id, enabled) {
+    fetch(`/api/items/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+    })
+    .then(r => r.json())
+    .then(() => { loadItems(); EyesUI.toast(enabled ? '已启用' : '已禁用', 'success'); });
+}
+
+// ========== 设置 ==========
+function loadSettings() {
+    fetch('/api/settings')
+        .then(r => r.json())
+        .then(s => {
+            document.getElementById('bark-switch').innerHTML = EyesUI.Switch({ id: 'bark-enabled', checked: s.bark_enabled === '1' });
+            document.getElementById('bark-key').value = s.bark_key || '';
+            document.getElementById('bark-server').value = s.bark_server || '';
+            document.getElementById('bark-group').value = s.bark_group || '';
+            document.getElementById('email-switch').innerHTML = EyesUI.Switch({ id: 'email-enabled', checked: s.email_enabled === '1' });
+            document.getElementById('email-from').value = s.email_from || '';
+            document.getElementById('email-to').value = s.email_to || '';
+            document.getElementById('smtp-host').value = s.smtp_host || '';
+            document.getElementById('smtp-port').value = s.smtp_port || '';
+            document.getElementById('smtp-ssl-checkbox').innerHTML = EyesUI.Checkbox({ id: 'smtp-ssl', label: '使用 SSL', checked: s.smtp_ssl === '1' });
+            document.getElementById('smtp-user').value = s.smtp_user || '';
+            document.getElementById('smtp-password').value = s.smtp_password || '';
+            document.getElementById('web-password').value = s.web_password || '';
+            document.getElementById('agent-url').value = s.agent_url || '';
+        });
+}
+
+function saveSettings() {
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            bark_enabled: document.getElementById('bark-enabled').classList.contains('active') ? '1' : '0',
+            bark_key: document.getElementById('bark-key').value,
+            bark_server: document.getElementById('bark-server').value,
+            bark_group: document.getElementById('bark-group').value,
+            email_enabled: document.getElementById('email-enabled').classList.contains('active') ? '1' : '0',
+            email_from: document.getElementById('email-from').value,
+            email_to: document.getElementById('email-to').value,
+            smtp_host: document.getElementById('smtp-host').value,
+            smtp_port: document.getElementById('smtp-port').value,
+            smtp_ssl: document.getElementById('smtp-ssl').checked ? '1' : '0',
+            smtp_user: document.getElementById('smtp-user').value,
+            smtp_password: document.getElementById('smtp-password').value,
+            web_password: document.getElementById('web-password').value,
+            agent_url: document.getElementById('agent-url').value,
+        })
+    })
+    .then(r => r.json())
+    .then(() => EyesUI.toast('设置已保存', 'success'));
+}
+
+function testBark() {
+    fetch('/api/test-bark', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => EyesUI.toast(d.success ? '测试推送已发送' : '推送失败', d.success ? 'success' : 'error'));
+}
+
+function testEmail() {
+    fetch('/api/test-email', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => EyesUI.toast(d.success ? '测试邮件已发送' : (d.error || '发送失败'), d.success ? 'success' : 'error'));
+}
+
+function testAgent() {
+    const url = document.getElementById('agent-url').value;
+    if (!url) { EyesUI.toast('请输入 Agent 地址', 'error'); return; }
+    EyesUI.toast('正在测试连接...', 'info');
+    fetch(url + '/api/info')
+        .then(r => r.json())
+        .then(d => EyesUI.toast(d.hostname ? `连接成功: ${d.hostname}` : '连接失败', d.hostname ? 'success' : 'error'))
+        .catch(() => EyesUI.toast('连接失败', 'error'));
+}
+
+// 初始化
+loadItems();
+</script>
+{% endblock %}
