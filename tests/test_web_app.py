@@ -37,8 +37,14 @@ intervals = client.get('/api/check-intervals').get_json()
 assert intervals['resources'] == 300
 assert intervals['docker'] == 600
 assert intervals['systemd'] == 1800
+assert intervals['wireguard'] == 60
+assert intervals['network_speed'] == 600
 assert intervals['scheduled_checks_enabled'] is False
 assert client.post('/api/check-intervals', json={'group': 'docker', 'minutes': 30}).status_code == 409
+response = client.post('/api/check-intervals', json={'group': 'wireguard', 'minutes': 5})
+assert response.status_code == 200
+assert response.get_json()['seconds'] == 300
+assert client.get('/api/check-intervals').get_json()['wireguard'] == 300
 os.environ['EYES_ENABLE_SCHEDULED_CHECKS'] = '1'
 response = client.post('/api/check-intervals', json={'group': 'docker', 'minutes': 30})
 assert response.status_code == 200
