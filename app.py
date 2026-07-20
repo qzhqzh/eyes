@@ -3,6 +3,8 @@
 
 import os
 import functools
+import hmac
+import secrets
 import subprocess
 import re
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
@@ -17,14 +19,38 @@ from checker import run_check, run_all_checks
 from bark import send_bark_alert, send_bark_recovery
 from email_sender import send_email_alert, send_email_report, send_test_email
 from scanner import scan_all
+from fleet import init_fleet_db, ensure_local_hub_node
+from hub_api import hub_api
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-app.secret_key = "eyes-secret-key-2026-stable"
+secure_config_required = os.environ.get("EYES_REQUIRE_SECURE_CONFIG") == "1"
+configured_secret = os.environ.get("EYES_SECRET_KEY", "")
+configured_web_password = os.environ.get("EYES_WEB_PASSWORD", "")
+configured_enroll_token = os.environ.get("EYES_HUB_ENROLL_TOKEN", "")
+secure_values = (configured_secret, configured_web_password, configured_enroll_token)
+if secure_config_required and (
+    not configured_secret
+    or not configured_web_password
+    or len(configured_secret) < 32
+    or len(configured_web_password) < 12
+    or (configured_enroll_token and len(configured_enroll_token) < 24)
+    or any(value.lower().startswith("replace-with-") for value in secure_values)
+):
+    raise RuntimeError(
+        "set non-placeholder EYES_SECRET_KEY (32+ chars), EYES_WEB_PASSWORD "
+        "(12+ chars), and optional EYES_HUB_ENROLL_TOKEN (24+ chars)"
+    )
+app.secret_key = configured_secret or secrets.token_urlsafe(32)
 
 # 初始化数据库
 init_db()
 init_default_settings()
+
+# 多节点控制面基础表和版本化 API
+init_fleet_db()
+ensure_local_hub_node()
+app.register_blueprint(hub_api)
 
 # 配置目录
 CONF_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "conf.d")
@@ -166,8 +192,8 @@ def login():
     """登录页面"""
     if request.method == "POST":
         password = request.form.get("password", "")
-        stored_password = get_setting("web_password", "eyes123")
-        if password == stored_password:
+        stored_password = configured_web_password or get_setting("web_password", "")
+        if stored_password and hmac.compare_digest(password, stored_password):
             session["logged_in"] = True
             return redirect(url_for("index"))
         return render_template("login.html", error="密码错误")
@@ -204,6 +230,13 @@ def index():
                          settings=settings,
                          grouped_items=grouped_items,
                          result_map=result_map)
+
+
+@app.route("/fleet")
+@login_required
+def fleet_view():
+    """多节点 Fleet 页面。"""
+    return render_template("fleet.html")
 
 
 @app.route("/api/settings", methods=["GET"])
@@ -452,6 +485,61 @@ def network_speed():
     return jsonify(results)
 
 
+@app.route("/api/last-check-time", methods=["GET"])
+@login_required
+def last_check_time():
+    """获取最近一次检查时间"""
+    from models import get_db
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT checked_at FROM check_results ORDER BY id DESC LIMIT 1")
+    row = cursor.fetchone()
+    conn.close()
+    if row and row["checked_at"]:
+        return jsonify({"time": row["checked_at"]})
+    return jsonify({"time": None})
+
+
+@app.route("/api/wg-status", methods=["GET"])
+@login_required
+def wg_status():
+    """检测 WireGuard 接口状态和流量"""
+    import os
+    
+    wg_ifaces = {'wg0': 'wg0', 'wg1': 'dev_wg'}
+    results = {}
+    
+    dev_path = '/proc/net/dev'
+    # 回退：容器网络不可见则读宿主机文件
+    lines = []
+    try:
+        with open(dev_path) as f:
+            lines = f.readlines()
+    except Exception:
+        try:
+            with open('/host_proc_net/dev') as f:
+                lines = f.readlines()
+        except Exception:
+            pass
+    
+    for display_name, iface in wg_ifaces.items():
+        info = {'ok': False, 'tx_bytes': 0, 'rx_bytes': 0, 'ip': None}
+        
+        # 从 /host_proc_net/dev 查找接口
+        for line in lines:
+            if line.strip().startswith(iface + ':'):
+                info['ok'] = True
+                parts = line.strip().split(':')[1].strip().split()
+                if len(parts) >= 16:
+                    info['rx_bytes'] = int(parts[0])
+                    info['tx_bytes'] = int(parts[8])
+                break
+        
+        results[display_name] = info
+    
+    return jsonify(results)
+
+
 @app.route("/api/test-email", methods=["POST"])
 @login_required
 def test_email():
@@ -483,4 +571,3 @@ def test_email():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-

@@ -5,12 +5,17 @@ import sqlite3
 import os
 from pathlib import Path
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eyes.db")
+DB_PATH = os.environ.get(
+    "EYES_DB_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "eyes.db"),
+)
 
 
 def get_db():
     """获取数据库连接"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 30000")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -18,6 +23,7 @@ def get_db():
 def init_db():
     """初始化数据库表"""
     conn = get_db()
+    conn.execute("PRAGMA journal_mode = WAL")
     cursor = conn.cursor()
 
     # 通知配置表
@@ -194,8 +200,8 @@ def delete_check_item(item_id):
     """删除监控项"""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM check_items WHERE id = ?", (item_id,))
     cursor.execute("DELETE FROM check_results WHERE item_id = ?", (item_id,))
+    cursor.execute("DELETE FROM check_items WHERE id = ?", (item_id,))
     conn.commit()
     conn.close()
 
@@ -292,18 +298,18 @@ def init_default_settings():
     """初始化默认配置"""
     defaults = {
         "bark_enabled": "0",
-        "bark_key": "LjatX7Jg3zEuu8Q7itMhA8",
+        "bark_key": "",
         "bark_server": "https://api.day.app",
         "bark_group": "Dev",
         "email_enabled": "0",
-        "email_from": "zhuqin@claw.163.com",
-        "email_to": "28630707@qq.com",
-        "smtp_host": "claw.163.com",
+        "email_from": "",
+        "email_to": "",
+        "smtp_host": "",
         "smtp_port": "25",
         "smtp_ssl": "0",
-        "smtp_user": "zhuqin@claw.163.com",
+        "smtp_user": "",
         "smtp_password": "",
-        "web_password": "eyes123",
+        "web_password": "",
         "check_interval": "600",  # 秒，10分钟
         "agent_url": "http://host.docker.internal:9091",  # 宿主机 agent 地址
         "resource_collect_interval": "300",  # 秒，5分钟

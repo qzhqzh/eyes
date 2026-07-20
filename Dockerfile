@@ -19,7 +19,7 @@ COPY . .
 RUN python models.py
 
 # 暴露端口
-EXPOSE 5000
+EXPOSE 8090
 
 # 启动应用
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "--reload", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8090", "--workers", "1", "--timeout", "120", "app:app"]

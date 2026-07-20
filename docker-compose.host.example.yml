@@ -1,0 +1,8 @@
+services:
+  eyes-web:
+    volumes:
+      # Optional, high-privilege access for the legacy local Docker checks.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Adjust or remove these two host-specific collectors before use.
+      - /path/to/nginx/conf.d:/nginx-conf.d:ro
+      - /path/to/nas:/mnt/nas:ro

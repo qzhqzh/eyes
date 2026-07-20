@@ -30,6 +30,17 @@
                 </a>
             </li>
             <li class="mb-1">
+                <a class="nav-link" href="/fleet">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+                        <circle cx="5" cy="12" r="2"/>
+                        <circle cx="19" cy="5" r="2"/>
+                        <circle cx="19" cy="19" r="2"/>
+                        <path d="M7 12h5m2-1 3-4m-3 6 3 4"/>
+                    </svg>
+                    Fleet 节点
+                </a>
+            </li>
+            <li class="mb-1">
                 <a class="nav-link" onclick="switchTab('management')" data-tab="management">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
@@ -84,8 +95,8 @@
         <!-- 统计数据 -->
         <div class="flex gap-4 mb-4" id="summary">
             <!-- 健康度环形图卡片 -->
-            <div class="e-card" style="width: 200px;">
-                <div class="e-card-body" style="display: flex; align-items: center; gap: 16px;">
+            <div class="e-card" style="width: 180px;">
+                <div class="e-card-body" style="display: flex; align-items: center; gap: 12px;">
                     <div id="health-ring"></div>
                     <div>
                         <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">健康度</div>
@@ -95,44 +106,44 @@
             </div>
             
             <!-- 服务统计：上排数字 + 下排类型 -->
-            <div class="e-card" style="width: 320px;">
+            <div class="e-card" style="width: 300px;">
                 <div class="e-card-body">
-                    <div class="flex flex-col gap-3">
-                        <div class="flex gap-6">
+                    <div class="flex flex-col gap-2">
+                        <div class="flex gap-4">
                             <div>
-                                <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">监控项</div>
-                                <div style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-text-primary);" id="total-count">-</div>
+                                <div style="font-size: 11px; color: var(--eyes-text-muted);">监控项</div>
+                                <div style="font-size: var(--eyes-font-size-xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-text-primary);" id="total-count">-</div>
                             </div>
                             <div>
-                                <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">正常</div>
-                                <div style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-success);" id="passed-count">-</div>
+                                <div style="font-size: 11px; color: var(--eyes-text-muted);">正常</div>
+                                <div style="font-size: var(--eyes-font-size-xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-success);" id="passed-count">-</div>
                             </div>
                             <div>
-                                <div style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-muted);">异常</div>
-                                <div style="font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-danger);" id="failed-count">-</div>
+                                <div style="font-size: 11px; color: var(--eyes-text-muted);">异常</div>
+                                <div style="font-size: var(--eyes-font-size-xl); font-weight: var(--eyes-font-weight-bold); color: var(--eyes-danger);" id="failed-count">-</div>
                             </div>
                         </div>
                         <div style="padding-top: var(--eyes-spacing-xs); border-top: 1px solid var(--eyes-border);">
-                            <div id="type-stats" style="display: flex; gap: 16px; align-items: center;"></div>
+                            <div id="type-stats" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"></div>
                         </div>
                     </div>
                 </div>
             </div>
             
             <!-- 资源状态 -->
-            <div id="compact-status-card" style="width: 320px; flex-shrink: 0;">
+            <div id="compact-status-card" style="width: 400px; flex-shrink: 0;">
                 <div class="e-card">
                     <div class="e-card-header">
                         <div class="e-card-title">资源状态</div>
                         <div class="flex items-center gap-2">
-                            <select class="e-select" style="width: 72px; padding: 2px 6px; font-size: 11px;" id="collect-interval" onchange="updateCollectInterval(this.value)">
+                            <select class="e-select" style="width: 68px; padding: 2px 6px; font-size: 11px;" id="collect-interval" onchange="updateCollectInterval(this.value)">
                                 <option value="1">1分钟</option>
                                 <option value="5" selected>5分钟</option>
                                 <option value="10">10分钟</option>
                                 <option value="30">30分钟</option>
                             </select>
                             <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadSystemStatsAndTrend()" style="padding: 4px;">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                                 </svg>
                             </button>
@@ -145,12 +156,12 @@
             </div>
             
             <!-- 网速测试 -->
-            <div style="width: 260px; flex-shrink: 0;">
+            <div style="width: 200px; flex-shrink: 0;">
                 <div class="e-card">
                     <div class="e-card-header">
-                        <div class="e-card-title">网速测试</div>
+                        <div class="e-card-title">网速</div>
                         <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadNetworkSpeed()" style="padding: 4px;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                             </svg>
                         </button>
@@ -423,6 +434,11 @@ function scanAndCheck() {
                                  checkData.failed > 0 ? 'error' : 'success');
                     loadItems();
                     loadAllItems();
+                    // 更新上次检查时间
+                    const now = new Date();
+                    const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+                    const el = document.getElementById('last-check-time');
+                    if (el) el.textContent = `上次检查: ${timeStr}`;
                 });
         });
 }
@@ -546,16 +562,29 @@ function restoreItem(itemId) {
 
 // ========== 加载监控项 ==========
 function loadItems() {
-    // 同时加载监控项和检查结果
+    // 同时加载监控项、检查结果、上次检查时间
     Promise.all([
         fetch('/api/items').then(r => r.json()),
-        fetch('/api/results').then(r => r.json())
-    ]).then(([items, results]) => {
+        fetch('/api/results').then(r => r.json()),
+        fetch('/api/last-check-time').then(r => r.json())
+    ]).then(([items, results, lastCheck]) => {
         allItems = items;
         allResults = results;
+        
+        // 更新上次检查时间
+        console.log('lastCheck:', lastCheck);
+        if (lastCheck && lastCheck.time) {
+            // time 格式："2026-07-04 12:55:27" → 取 "12:55:27"
+            const timeStr = lastCheck.time.includes(' ') ? lastCheck.time.split(' ')[1] : lastCheck.time;
+            const el = document.getElementById('last-check-time');
+            console.log('Setting time:', timeStr, 'element:', el);
+            if (el) el.textContent = `上次检查：${timeStr}`;
+        }
+        
         renderItemsByType();
         updateSummary();
-    });
+    })
+    .catch(e => console.error('loadItems error:', e));
     
     // 加载采集频率设置
     fetch('/api/resource-collect-interval')
@@ -653,7 +682,7 @@ function renderItemsByType() {
     // 渲染单个卡片
     function renderCard(type, items) {
         const enabledCount = items.filter(i => i.enabled).length;
-        const pageSize = 10;
+        const pageSize = 5;
         
         // 初始化分页状态
         if (!itemsPagination[type]) {
@@ -783,7 +812,24 @@ function renderItemsByType() {
         html += `<div class="flex gap-3.5">${row1Cards.join('')}</div>`;
     }
     
-    // 趋势卡片（2x2）
+    // 监控项下半部分：WireGuard（独占整行）
+    html += `\
+        <div class="e-card">
+            <div class="e-card-header">
+                <div class="e-card-title">WireGuard</div>
+                <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadWgStatus()" style="padding: 4px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="e-card-body">
+                <div id="wg-list" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 16px;"></div>
+            </div>
+        </div>
+    `;
+    
+    // 趋势卡片（2x2 网格）
     html += `
         <div id="trend-cards-container" class="flex flex-col gap-3.5" style="margin-top: 14px;">
             <div class="flex gap-3.5">
@@ -810,6 +856,7 @@ function renderItemsByType() {
     // 加载系统资源
     if (document.getElementById('system-stats')) loadSystemStats();
     if (document.getElementById('speed-list')) loadNetworkSpeed();
+    if (document.getElementById('wg-list')) loadWgStatus();
     // 加载趋势图（setTimeout 确保 innerHTML 已生效，SVG 有尺寸）
     requestAnimationFrame(() => loadResourceTrend());
 }
@@ -935,7 +982,45 @@ function loadSystemStatsAndTrend() {
     loadResourceTrend();
 }
 
-// ========== 网速测试 ==========
+// ========== WireGuard 状态 ==========
+function loadWgStatus() {
+    const list = document.getElementById('wg-list');
+    if (!list) return;
+    list.innerHTML = '<div style="text-align:center;padding:8px;color:var(--eyes-text-muted);font-size:11px;">检测中...</div>';
+    
+    fetch('/api/wg-status')
+        .then(r => r.json())
+        .then(data => {
+            const entries = Object.entries(data);
+            if (!list) return;
+            
+            list.innerHTML = entries.map(([key, v]) => {
+                const ok = v && v.ok;
+                const color = ok ? 'var(--eyes-success)' : 'var(--eyes-danger)';
+                
+                const fmtBytes = (b) => {
+                    if (!b) return '0';
+                    const gb = b / 1073741824;
+                    return gb >= 1 ? gb.toFixed(1) + 'GB' : (b / 1048576).toFixed(0) + 'MB';
+                };
+                const tx = v && v.tx_bytes ? fmtBytes(v.tx_bytes) : '-';
+                const rx = v && v.rx_bytes ? fmtBytes(v.rx_bytes) : '-';
+                
+                return `\
+                    <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--eyes-bg-input);border-radius:var(--eyes-radius-sm);">
+                        <span style="width:6px;height:6px;border-radius:50%;background:${color};flex-shrink:0;box-shadow:0 0 6px ${color}80;"></span>
+                        <span style="flex:1;font-size:12px;color:var(--eyes-text-secondary);font-weight:500;">${key}</span>
+                        <span style="font-size:10px;color:var(--eyes-text-muted);font-variant-numeric:tabular-nums;">↑${tx} ↓${rx}</span>
+                        <span style="font-size:10px;font-weight:600;color:${color};">${ok ? 'UP' : 'DOWN'}</span>
+                    </div>
+                `;
+            }).join('');
+        })
+        .catch(() => {
+            if (!list) return;
+            list.innerHTML = '<div style="text-align:center;padding:8px;color:var(--eyes-danger);font-size:11px;">请求失败</div>';
+        });
+}
 const speedTargets = {
     google:  { label: 'Google',  color: '#4285f4' },
     github:  { label: 'GitHub',  color: '#f0f0f0' },

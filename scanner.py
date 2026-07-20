@@ -69,8 +69,11 @@ def scan_docker_containers():
     return containers
 
 
-def scan_nginx_routes(nginx_conf_dir="/home/zhuqin/star/gateway/nginx/conf.d"):
+def scan_nginx_routes(nginx_conf_dir=None):
     """从 nginx 配置扫描服务（通过反向代理发现后端服务）"""
+    nginx_conf_dir = nginx_conf_dir or os.environ.get(
+        "EYES_NGINX_CONF_DIR", "/nginx-conf.d"
+    )
     routes = []
     conf_dir = Path(nginx_conf_dir)
     if not conf_dir.is_dir():

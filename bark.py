@@ -87,14 +87,3 @@ def send_bark_recovery(recovered_names, server="https://api.day.app", key="", gr
         body += f" 等{count}项"
 
     return send_bark(title, body, server, key, group)
-
-
-if __name__ == "__main__":
-    # 测试推送
-    result = send_bark(
-        title="eyes 测试",
-        body="这是一条测试消息",
-        key="LjatX7Jg3zEuu8Q7itMhA8",
-        group="Dev"
-    )
-    print(f"推送结果: {'成功' if result else '失败'}")

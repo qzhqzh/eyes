@@ -1,26 +1,15 @@
-version: '3.8'
-
 services:
   eyes-web:
     build: .
     container_name: eyes-web
     restart: unless-stopped
-    ports:
-      - "8090:5000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    network_mode: host
     volumes:
       - ./data:/app/data
-      - ./eyes.db:/app/eyes.db
-      - .:/app
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /home/zhuqin/star/gateway/nginx/conf.d:/nginx-conf.d:ro
-      - /mnt/nas:/mnt/nas:ro
     environment:
-      - TZ=Asia/Shanghai
-    networks:
-      - eyes-net
-
-networks:
-  eyes-net:
-    name: eyes-net
+      TZ: ${TZ:-Asia/Shanghai}
+      EYES_DB_PATH: /app/data/eyes.db
+      EYES_REQUIRE_SECURE_CONFIG: "1"
+      EYES_SECRET_KEY: ${EYES_SECRET_KEY:?set EYES_SECRET_KEY in .env}
+      EYES_WEB_PASSWORD: ${EYES_WEB_PASSWORD:?set EYES_WEB_PASSWORD in .env}
+      EYES_HUB_ENROLL_TOKEN: ${EYES_HUB_ENROLL_TOKEN:-}

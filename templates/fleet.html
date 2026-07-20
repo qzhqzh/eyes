@@ -1,0 +1,406 @@
+{% extends "base.html" %}
+
+{% block title %}eyes — Fleet 节点{% endblock %}
+
+{% block extra_css %}
+<style>
+    .fleet-shell {
+        width: min(1440px, 100%);
+        margin: 0 auto;
+        padding: var(--eyes-spacing-lg);
+    }
+
+    .fleet-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--eyes-spacing);
+        margin-bottom: var(--eyes-spacing-lg);
+    }
+
+    .fleet-title {
+        color: var(--eyes-text-primary);
+        font-size: var(--eyes-font-size-2xl);
+        font-weight: var(--eyes-font-weight-semibold);
+    }
+
+    .fleet-subtitle,
+    .fleet-muted {
+        color: var(--eyes-text-muted);
+        font-size: var(--eyes-font-size-sm);
+    }
+
+    .fleet-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
+        gap: var(--eyes-spacing);
+        align-items: start;
+    }
+
+    .fleet-table-wrap {
+        overflow-x: auto;
+    }
+
+    .fleet-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--eyes-font-size-base);
+    }
+
+    .fleet-table th {
+        padding: var(--eyes-spacing-sm) var(--eyes-spacing);
+        color: var(--eyes-text-muted);
+        font-size: var(--eyes-font-size-xs);
+        font-weight: var(--eyes-font-weight-medium);
+        text-align: left;
+        border-bottom: 1px solid var(--eyes-border);
+        white-space: nowrap;
+    }
+
+    .fleet-table td {
+        padding: var(--eyes-spacing-sm) var(--eyes-spacing);
+        color: var(--eyes-text-secondary);
+        border-bottom: 1px solid var(--eyes-border);
+        vertical-align: middle;
+    }
+
+    .fleet-table tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .fleet-table tbody tr {
+        cursor: pointer;
+        transition: background-color var(--eyes-transition-fast);
+    }
+
+    .fleet-table tbody tr:hover {
+        background: var(--eyes-bg-card-hover);
+    }
+
+    .fleet-row-button {
+        width: 100%;
+        min-height: 44px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--eyes-text-primary);
+        font: inherit;
+        font-weight: var(--eyes-font-weight-medium);
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .fleet-row-button:hover,
+    .fleet-row-button:focus-visible {
+        color: var(--eyes-primary);
+        outline: none;
+    }
+
+    .fleet-role-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--eyes-spacing-2xs);
+    }
+
+    .fleet-state {
+        min-height: 180px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--eyes-spacing-sm);
+        padding: var(--eyes-spacing-lg);
+        color: var(--eyes-text-muted);
+        text-align: center;
+    }
+
+    .fleet-detail-meta {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--eyes-spacing-sm);
+        margin-bottom: var(--eyes-spacing);
+    }
+
+    .fleet-meta-item {
+        padding: var(--eyes-spacing-sm);
+        background: var(--eyes-bg-input);
+        border-radius: var(--eyes-radius-sm);
+    }
+
+    .fleet-meta-label {
+        display: block;
+        margin-bottom: var(--eyes-spacing-2xs);
+        color: var(--eyes-text-muted);
+        font-size: var(--eyes-font-size-xs);
+    }
+
+    .fleet-meta-value {
+        color: var(--eyes-text-primary);
+        font-size: var(--eyes-font-size-base);
+        overflow-wrap: anywhere;
+    }
+
+    .fleet-json-title {
+        margin: var(--eyes-spacing) 0 var(--eyes-spacing-xs);
+        color: var(--eyes-text-primary);
+        font-size: var(--eyes-font-size-sm);
+        font-weight: var(--eyes-font-weight-medium);
+    }
+
+    .fleet-json {
+        max-height: 300px;
+        margin: 0;
+        padding: var(--eyes-spacing-sm);
+        overflow: auto;
+        background: var(--eyes-bg-page);
+        border: 1px solid var(--eyes-border);
+        border-radius: var(--eyes-radius-sm);
+        color: var(--eyes-text-secondary);
+        font-size: var(--eyes-font-size-xs);
+        line-height: 1.6;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 900px) {
+        .fleet-shell {
+            padding: var(--eyes-spacing);
+        }
+
+        .fleet-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 560px) {
+        .fleet-header {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .fleet-detail-meta {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<main class="fleet-shell">
+    <header class="fleet-header">
+        <div>
+            <h1 class="fleet-title">Fleet</h1>
+            <p class="fleet-subtitle">查看已连接节点及其最近一次资源快照</p>
+        </div>
+        <div class="flex gap-2">
+            <a class="e-btn e-btn-secondary" href="/">返回监控</a>
+            <button class="e-btn e-btn-primary" id="refresh-fleet" type="button">刷新</button>
+        </div>
+    </header>
+
+    <div class="fleet-grid">
+        <section class="e-card" aria-labelledby="fleet-list-title">
+            <div class="e-card-header">
+                <div>
+                    <div class="e-card-title" id="fleet-list-title">节点</div>
+                    <div class="fleet-muted" id="fleet-count">正在加载</div>
+                </div>
+            </div>
+            <div id="fleet-list-state" aria-live="polite"></div>
+            <div class="fleet-table-wrap" id="fleet-table-wrap" hidden>
+                <table class="fleet-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">名称</th>
+                            <th scope="col">状态</th>
+                            <th scope="col">角色</th>
+                            <th scope="col">主机名</th>
+                            <th scope="col">最后在线</th>
+                            <th scope="col">快照</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fleet-table-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <aside class="e-card" aria-labelledby="fleet-detail-title">
+            <div class="e-card-header">
+                <div class="e-card-title" id="fleet-detail-title">节点详情</div>
+            </div>
+            <div class="e-card-body" id="fleet-detail" aria-live="polite">
+                <div class="fleet-state">选择一个节点查看 Inventory 和 Resources 摘要</div>
+            </div>
+        </aside>
+    </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const listState = document.getElementById('fleet-list-state');
+    const tableWrap = document.getElementById('fleet-table-wrap');
+    const tableBody = document.getElementById('fleet-table-body');
+    const count = document.getElementById('fleet-count');
+    const detail = document.getElementById('fleet-detail');
+    const refreshButton = document.getElementById('refresh-fleet');
+
+    function element(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+
+    function state(message, actionLabel, action) {
+        const container = element('div', 'fleet-state');
+        container.appendChild(element('div', '', message));
+        if (actionLabel && action) {
+            const button = element('button', 'e-btn e-btn-secondary', actionLabel);
+            button.type = 'button';
+            button.addEventListener('click', action);
+            container.appendChild(button);
+        }
+        return container;
+    }
+
+    function formatTime(value) {
+        if (!value) return '—';
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString();
+    }
+
+    function statusClass(value) {
+        if (value === 'ready' || value === 'local') return 'e-badge e-badge-success';
+        if (value === 'stale' || value === 'enrolled') return 'e-badge e-badge-warning';
+        return 'e-badge e-badge-danger';
+    }
+
+    async function fetchJson(url) {
+        const response = await fetch(url, {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+        });
+        if (!response.ok) throw new Error(`请求失败（HTTP ${response.status}）`);
+        return response.json();
+    }
+
+    function appendCell(row, childOrText) {
+        const cell = document.createElement('td');
+        if (childOrText instanceof Node) cell.appendChild(childOrText);
+        else cell.textContent = childOrText;
+        row.appendChild(cell);
+    }
+
+    function renderNodes(nodes) {
+        tableBody.replaceChildren();
+        count.textContent = `${nodes.length} 个节点`;
+        if (!nodes.length) {
+            tableWrap.hidden = true;
+            listState.replaceChildren(state('尚无已注册节点。启动一个 eyes-agent 后在这里刷新。'));
+            return;
+        }
+
+        nodes.forEach((node) => {
+            const row = document.createElement('tr');
+            row.addEventListener('click', () => loadNodeDetail(node.id));
+            const nameButton = element(
+                'button',
+                'fleet-row-button',
+                node.display_name || node.id || '未命名节点'
+            );
+            nameButton.type = 'button';
+            appendCell(row, nameButton);
+
+            const badge = element('span', statusClass(node.status), node.status || 'unknown');
+            appendCell(row, badge);
+
+            const roles = element('div', 'fleet-role-list');
+            const roleValues = Array.isArray(node.roles) ? node.roles : [];
+            if (roleValues.length) {
+                roleValues.forEach((role) => roles.appendChild(element('span', 'e-badge e-badge-primary', String(role))));
+            } else {
+                roles.appendChild(element('span', 'fleet-muted', '—'));
+            }
+            appendCell(row, roles);
+            appendCell(row, node.hostname || '—');
+            appendCell(row, formatTime(node.last_seen_at));
+            appendCell(row, String(node.snapshot_count ?? 0));
+            tableBody.appendChild(row);
+        });
+
+        listState.replaceChildren();
+        tableWrap.hidden = false;
+    }
+
+    function metaItem(label, value) {
+        const item = element('div', 'fleet-meta-item');
+        item.appendChild(element('span', 'fleet-meta-label', label));
+        item.appendChild(element('div', 'fleet-meta-value', value || '—'));
+        return item;
+    }
+
+    function snapshotSummary(snapshot) {
+        if (!snapshot) return { available: false };
+        return {
+            generation: snapshot.generation,
+            observed_at: snapshot.observed_at,
+            received_at: snapshot.received_at,
+            payload: snapshot.payload,
+        };
+    }
+
+    function renderNodeDetail(node) {
+        const body = document.createDocumentFragment();
+        const meta = element('div', 'fleet-detail-meta');
+        meta.appendChild(metaItem('名称', node.display_name || node.id));
+        meta.appendChild(metaItem('状态', node.status));
+        meta.appendChild(metaItem('Node ID', node.id));
+        meta.appendChild(metaItem('最后在线', formatTime(node.last_seen_at)));
+        body.appendChild(meta);
+
+        const snapshots = node.snapshots || {};
+        body.appendChild(element('div', 'fleet-json-title', 'Inventory'));
+        const inventory = element('pre', 'fleet-json');
+        inventory.textContent = JSON.stringify(snapshotSummary(snapshots.inventory), null, 2);
+        body.appendChild(inventory);
+
+        body.appendChild(element('div', 'fleet-json-title', 'Resources'));
+        const resources = element('pre', 'fleet-json');
+        resources.textContent = JSON.stringify(snapshotSummary(snapshots.resources), null, 2);
+        body.appendChild(resources);
+        detail.replaceChildren(body);
+    }
+
+    async function loadNodeDetail(nodeId) {
+        detail.replaceChildren(state('正在加载节点详情…'));
+        try {
+            renderNodeDetail(await fetchJson(`/api/v1/nodes/${encodeURIComponent(nodeId)}`));
+        } catch (error) {
+            detail.replaceChildren(state(error.message || '节点详情加载失败', '重试', () => loadNodeDetail(nodeId)));
+        }
+    }
+
+    async function loadNodes() {
+        refreshButton.disabled = true;
+        tableWrap.hidden = true;
+        count.textContent = '正在加载';
+        listState.replaceChildren(state('正在加载 Fleet 节点…'));
+        try {
+            const nodes = await fetchJson('/api/v1/nodes');
+            if (!Array.isArray(nodes)) throw new Error('Hub 返回了无效的节点列表');
+            renderNodes(nodes);
+        } catch (error) {
+            count.textContent = '加载失败';
+            listState.replaceChildren(state(error.message || 'Fleet 加载失败', '重试', loadNodes));
+        } finally {
+            refreshButton.disabled = false;
+        }
+    }
+
+    refreshButton.addEventListener('click', loadNodes);
+    loadNodes();
+})();
+</script>
+{% endblock %}
