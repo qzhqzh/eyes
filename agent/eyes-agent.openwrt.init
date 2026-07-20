@@ -18,6 +18,10 @@ start_service() {
         set +a
     fi
 
+    node_roles="${EYES_NODE_ROLES:-worker}"
+    node_labels="${EYES_NODE_LABELS:-}"
+    [ -n "$node_labels" ] || node_labels='{}'
+
     procd_open_instance
     procd_set_param command "$PYTHON" "$AGENT" --mode node
     procd_set_param env \
@@ -26,8 +30,8 @@ start_service() {
         EYES_HUB_URL="${EYES_HUB_URL:-}" \
         EYES_ENROLL_TOKEN="${EYES_ENROLL_TOKEN:-}" \
         EYES_DISPLAY_NAME="${EYES_DISPLAY_NAME:-}" \
-        EYES_NODE_ROLES="${EYES_NODE_ROLES:-worker}" \
-        EYES_NODE_LABELS="${EYES_NODE_LABELS:-{}}" \
+        EYES_NODE_ROLES="$node_roles" \
+        EYES_NODE_LABELS="$node_labels" \
         EYES_ALLOW_INSECURE_HTTP="${EYES_ALLOW_INSECURE_HTTP:-}"
     procd_set_param respawn 3600 5 5
     procd_set_param stdout 1
