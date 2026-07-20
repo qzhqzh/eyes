@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}eyes — 域名管理{% endblock %}
+
+{% block extra_css %}
+<style>
+    .domain-page { width: 100%; }
+    .domain-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--eyes-spacing); margin-bottom: var(--eyes-spacing-lg); }
+    .domain-title { color: var(--eyes-text-primary); font-size: var(--eyes-font-size-lg); font-weight: var(--eyes-font-weight-medium); }
+    .domain-subtitle { margin-top: 2px; color: var(--eyes-text-muted); font-size: var(--eyes-font-size-sm); }
+    .domain-summary { display: flex; align-items: center; gap: var(--eyes-spacing-lg); min-height: 58px; margin-bottom: var(--eyes-spacing); padding: var(--eyes-spacing); }
+    .domain-summary-item { color: var(--eyes-text-muted); font-size: var(--eyes-font-size-sm); }
+    .domain-summary-value { margin-left: 4px; color: var(--eyes-text-primary); font-size: var(--eyes-font-size-lg); font-weight: var(--eyes-font-weight-semibold); }
+    .domain-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--eyes-spacing); }
+    .domain-card { min-width: 0; }
+    .domain-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .domain-link { overflow: hidden; color: var(--eyes-text-primary); font-size: var(--eyes-font-size-md); font-weight: var(--eyes-font-weight-semibold); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+    .domain-link:hover { text-decoration: underline; }
+    .domain-upstream { margin-top: var(--eyes-spacing-sm); padding-top: var(--eyes-spacing-sm); overflow: hidden; border-top: 1px solid var(--eyes-border); color: var(--eyes-text-muted); font-size: var(--eyes-font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
+    @media (max-width: 640px) { .domain-header { flex-direction: column; } .domain-summary { align-items: flex-start; flex-direction: column; gap: var(--eyes-spacing-xs); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="eyes-app-shell">
+    {% include "_sidebar.html" %}
+    <main class="eyes-app-main">
+        <div class="domain-page">
+            <header class="domain-header">
+                <div>
+                    <h1 class="domain-title">域名管理</h1>
+                    <p class="domain-subtitle">读取 Gateway Nginx 代理配置，并检测域名当前的 HTTP 连通状态</p>
+                </div>
+                <button class="e-btn e-btn-outline" id="refresh-all" type="button">刷新全部</button>
+            </header>
+
+            <section class="e-card domain-summary" id="domain-summary" aria-live="polite">正在读取代理配置…</section>
+            <section class="domain-grid" id="domain-grid" aria-label="代理域名" aria-live="polite"></section>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const domainStates = {
+    healthy: { label: '正常可达', color: 'var(--eyes-success)' },
+    not_found: { label: '可达 · 404', color: 'var(--eyes-warning)' },
+    http_error: { label: '可达 · HTTP 异常', color: 'var(--eyes-danger)' },
+    unreachable: { label: '不可达', color: 'var(--eyes-danger)' },
+};
+
+function escapeDomainText(value) {
+    return String(value).replace(/[&<>'"]/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    })[character]);
+}
+
+function renderDomainCard(item) {
+    const state = domainStates[item.state] || domainStates.unreachable;
+    const domain = escapeDomainText(item.domain);
+    const upstream = item.upstreams && item.upstreams.length
+        ? escapeDomainText(item.upstreams.join(', '))
+        : '静态站点 / 未声明 upstream';
+    const rawDetail = escapeDomainText(item.detail || '连接失败');
+    const detail = item.status_code ? `HTTP ${item.status_code}` : '连接失败';
+    return `<article class="e-card domain-card" data-domain="${domain}">
+        <div class="e-card-body">
+            <div class="flex items-center gap-2">
+                <span class="domain-dot" style="background:${state.color};box-shadow:0 0 6px ${state.color};"></span>
+                <a class="domain-link" href="https://${domain}" target="_blank" rel="noopener noreferrer">${domain}</a>
+                <button class="e-btn e-btn-sm e-btn-ghost" style="margin-left:auto;padding:4px;" title="刷新此域名" aria-label="刷新 ${domain}" onclick="refreshDomain('${domain}')">↻</button>
+            </div>
+            <div class="flex items-center justify-between gap-2" style="margin-top:var(--eyes-spacing);">
+                <span style="font-size:var(--eyes-font-size-sm);font-weight:600;color:${state.color};">${state.label}</span>
+                <span style="max-width:62%;overflow:hidden;color:var(--eyes-text-muted);font-size:var(--eyes-font-size-xs);text-overflow:ellipsis;white-space:nowrap;" title="${rawDetail}">${detail} · ${item.latency_ms}ms</span>
+            </div>
+            <div class="domain-upstream" title="${upstream}">${upstream}</div>
+        </div>
+    </article>`;
+}
+
+function renderDomainSummary(items) {
+    const counts = items.reduce((result, item) => {
+        result[item.state] = (result[item.state] || 0) + 1;
+        return result;
+    }, {});
+    document.getElementById('domain-summary').innerHTML = `
+        <span class="domain-summary-item">代理域名 <strong class="domain-summary-value">${items.length}</strong></span>
+        <span class="domain-summary-item" style="color:var(--eyes-success);">正常 ${counts.healthy || 0}</span>
+        <span class="domain-summary-item" style="color:var(--eyes-warning);">404 ${counts.not_found || 0}</span>
+        <span class="domain-summary-item" style="color:var(--eyes-danger);">HTTP 异常 ${counts.http_error || 0}</span>
+        <span class="domain-summary-item" style="color:var(--eyes-danger);">不可达 ${counts.unreachable || 0}</span>`;
+}
+
+async function loadDomains() {
+    const button = document.getElementById('refresh-all');
+    button.disabled = true;
+    button.textContent = '检测中…';
+    try {
+        const response = await fetch('/api/domains');
+        const items = await response.json();
+        if (!response.ok) throw new Error(items.error || '读取失败');
+        document.getElementById('domain-grid').innerHTML = items.map(renderDomainCard).join('') || '<div class="e-card"><div class="e-card-body">未发现域名配置</div></div>';
+        renderDomainSummary(items);
+    } catch (error) {
+        document.getElementById('domain-grid').innerHTML = `<div class="e-card"><div class="e-card-body" style="color:var(--eyes-danger);">${escapeDomainText(error.message)}</div></div>`;
+    } finally {
+        button.disabled = false;
+        button.textContent = '刷新全部';
+    }
+}
+
+async function refreshDomain(domain) {
+    const current = document.querySelector(`[data-domain="${CSS.escape(domain)}"]`);
+    const button = current && current.querySelector('button');
+    if (button) button.disabled = true;
+    try {
+        const response = await fetch(`/api/domains/${encodeURIComponent(domain)}/status`);
+        const item = await response.json();
+        if (!response.ok) throw new Error(item.error || '刷新失败');
+        if (current) current.outerHTML = renderDomainCard(item);
+    } catch (error) {
+        EyesUI.toast(error.message || '刷新失败', 'error');
+        if (button) button.disabled = false;
+    }
+}
+
+document.getElementById('refresh-all').addEventListener('click', loadDomains);
+loadDomains();
+</script>
+{% endblock %}

@@ -27,6 +27,7 @@ from fleet import init_fleet_db, ensure_local_hub_node
 from hub_node import refresh_local_hub_node
 from hub_api import hub_api
 from network_status import collect_wireguard_with_agent, mounted_filesystem_type
+from domain_status import collect_domain_status
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
@@ -64,6 +65,7 @@ app.register_blueprint(hub_api)
 
 # 配置目录
 CONF_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "conf.d")
+GATEWAY_CONFIG_DIR = os.environ.get("EYES_GATEWAY_CONFIG_DIR", "/gateway/nginx/conf.d")
 
 
 def collect_stats():
@@ -343,6 +345,30 @@ def index():
                          settings=settings,
                          grouped_items=grouped_items,
                          result_map=result_map)
+
+
+@app.route("/domains")
+@login_required
+def domains():
+    """Proxy domain inventory and reachability dashboard."""
+    return render_template("domains.html", active_page="domains")
+
+
+@app.route("/api/domains", methods=["GET"])
+@login_required
+def domain_inventory():
+    """Return configured proxy domains with live reachability status."""
+    return jsonify(collect_domain_status(GATEWAY_CONFIG_DIR))
+
+
+@app.route("/api/domains/<domain>/status", methods=["GET"])
+@login_required
+def domain_status(domain):
+    """Refresh one configured domain without allowing arbitrary probes."""
+    results = collect_domain_status(GATEWAY_CONFIG_DIR, only_domain=domain)
+    if not results:
+        return jsonify({"error": "domain is not configured"}), 404
+    return jsonify(results[0])
 
 
 @app.route("/fleet")
