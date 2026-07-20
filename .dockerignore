@@ -3,6 +3,9 @@ __pycache__
 *.pyo
 .git
 .gitignore
+.env
+.vps
+config.yaml
 *.md
 eyes.db
 data/

@@ -1,6 +1,7 @@
 # 敏感配置文件（包含密码）
 config.yaml
 .env
+.vps
 
 # 自动生成的文件（由 --sync 生成）
 conf.d/_nginx_*.yaml

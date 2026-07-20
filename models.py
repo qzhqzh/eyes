@@ -3,6 +3,7 @@
 
 import sqlite3
 import os
+import time
 from pathlib import Path
 
 DB_PATH = os.environ.get(
@@ -110,6 +111,44 @@ def set_setting(key, value):
     """, (key, value, value))
     conn.commit()
     conn.close()
+
+
+def claim_operation_cooldown(key, cooldown_seconds, now=None):
+    """Atomically claim a cross-process operation cooldown window."""
+    timestamp = float(time.time() if now is None else now)
+    cooldown_seconds = max(1, int(cooldown_seconds))
+    setting_key = f"internal.cooldown.{key}"
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("BEGIN IMMEDIATE")
+        cursor.execute("SELECT value FROM settings WHERE key = ?", (setting_key,))
+        row = cursor.fetchone()
+        try:
+            previous = float(row["value"]) if row else 0.0
+        except (TypeError, ValueError):
+            previous = 0.0
+        remaining = cooldown_seconds - (timestamp - previous)
+        if remaining > 0:
+            conn.commit()
+            return False, max(1, int(remaining + 0.999))
+        cursor.execute(
+            """
+            INSERT INTO settings (key, value, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (setting_key, str(timestamp)),
+        )
+        conn.commit()
+        return True, 0
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def get_all_settings():

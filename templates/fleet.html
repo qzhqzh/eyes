@@ -4,9 +4,9 @@
 
 {% block extra_css %}
 <style>
-    .fleet-page { width: min(1500px, 100%); margin: 0 auto; }
+    .fleet-page { width: 100%; }
     .fleet-header { display: flex; align-items: center; justify-content: space-between; gap: var(--eyes-spacing); margin-bottom: var(--eyes-spacing-lg); }
-    .fleet-title { color: var(--eyes-text-primary); font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-semibold); }
+    .fleet-title { color: var(--eyes-text-primary); font-size: var(--eyes-font-size-lg); font-weight: var(--eyes-font-weight-medium); }
     .fleet-subtitle, .fleet-muted { color: var(--eyes-text-muted); font-size: var(--eyes-font-size-sm); }
     .fleet-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--eyes-spacing); margin-bottom: var(--eyes-spacing); }
     .fleet-summary-item { padding: var(--eyes-spacing); }
@@ -59,7 +59,7 @@
                     <h1 class="fleet-title">Fleet 节点</h1>
                     <p class="fleet-subtitle">汇总当前在线节点的联通状态、资源容量和可用能力</p>
                 </div>
-                <button class="e-btn e-btn-primary" id="refresh-fleet" type="button">刷新</button>
+                <button class="e-btn e-btn-outline" id="refresh-fleet" type="button">刷新</button>
             </header>
 
             <section class="fleet-summary" id="fleet-summary" aria-label="全网资源概览" aria-live="polite"></section>
