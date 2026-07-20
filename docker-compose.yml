@@ -6,6 +6,7 @@ services:
     network_mode: host
     volumes:
       - ./data:/app/data
+      - ./eyes.db:/app/data/eyes.db
       - /mnt/nas:/mnt/nas:ro
     environment:
       TZ: ${TZ:-Asia/Shanghai}
