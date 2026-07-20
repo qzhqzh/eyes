@@ -22,4 +22,4 @@ RUN python models.py
 EXPOSE 8090
 
 # 启动应用
-CMD ["gunicorn", "--bind", "0.0.0.0:8090", "--workers", "1", "--timeout", "120", "app:app"]
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${EYES_PORT:-8090} --workers 1 --timeout 120 app:app"]

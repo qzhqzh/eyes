@@ -15,7 +15,8 @@ from models import (
     init_db, init_default_settings, get_setting, set_setting, get_all_settings,
     get_check_items, get_all_check_items, add_check_item, update_check_item, delete_check_item,
     update_item_status, get_check_results, import_from_yaml, replace_check_results,
-    save_resource_metrics, get_resource_metrics, clear_old_metrics, DB_PATH
+    save_resource_metrics, get_resource_metrics, clear_old_metrics, DB_PATH,
+    claim_operation_cooldown
 )
 from checker import run_check, run_all_checks
 from bark import send_bark_alert, send_bark_recovery
@@ -24,6 +25,7 @@ from scanner import scan_all
 from fleet import init_fleet_db, ensure_local_hub_node
 from hub_node import refresh_local_hub_node
 from hub_api import hub_api
+from network_status import collect_wireguard_status
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
@@ -177,6 +179,8 @@ def collect_stats():
 
 
 _health_check_thread_lock = threading.Lock()
+_service_scan_thread_lock = threading.Lock()
+SERVICE_SCAN_COOLDOWN_SECONDS = 60
 
 
 def collect_health_checks():
@@ -395,33 +399,43 @@ def list_results():
 @login_required
 def scan_services():
     """扫描系统中的服务"""
-    settings = get_all_settings()
-    agent_url = settings.get("agent_url", "")
-    
-    results = scan_all(agent_url if agent_url else None)
-    
-    # 获取现有监控项
-    existing_items = get_check_items()
-    existing_targets = {item["target"] for item in existing_items}
-    
-    # 统计新增
-    added_count = 0
-    for item_type, items in results.items():
-        for item in items:
-            if item["target"] not in existing_targets:
-                add_check_item(item["type"], item["name"], item["target"])
-                added_count += 1
-                existing_targets.add(item["target"])
-    
-    return jsonify({
-        "success": True,
-        "added": added_count,
-        "details": {
-            "docker": len(results.get("docker", [])),
-            "systemd": len(results.get("systemd", [])),
-            "crond": len(results.get("crond", []))
-        }
-    })
+    if not _service_scan_thread_lock.acquire(blocking=False):
+        return jsonify({"error": "service scan is already running", "retry_after_seconds": 60}), 429
+    try:
+        claimed, retry_after = claim_operation_cooldown(
+            "service_scan", SERVICE_SCAN_COOLDOWN_SECONDS
+        )
+        if not claimed:
+            return jsonify(
+                {"error": "service scan cooldown is active", "retry_after_seconds": retry_after}
+            ), 429
+
+        settings = get_all_settings()
+        agent_url = settings.get("agent_url", "")
+        results = scan_all(agent_url if agent_url else None)
+
+        existing_items = get_check_items()
+        existing_targets = {item["target"] for item in existing_items}
+        added_count = 0
+        for items in results.values():
+            for item in items:
+                if item["target"] not in existing_targets:
+                    add_check_item(item["type"], item["name"], item["target"])
+                    added_count += 1
+                    existing_targets.add(item["target"])
+
+        return jsonify({
+            "success": True,
+            "added": added_count,
+            "cooldown_seconds": SERVICE_SCAN_COOLDOWN_SECONDS,
+            "details": {
+                "docker": len(results.get("docker", [])),
+                "systemd": len(results.get("systemd", [])),
+                "crond": len(results.get("crond", []))
+            }
+        })
+    finally:
+        _service_scan_thread_lock.release()
 
 
 @app.route("/api/test-bark", methods=["POST"])
@@ -540,40 +554,7 @@ def last_check_time():
 @login_required
 def wg_status():
     """检测 WireGuard 接口状态和流量"""
-    import os
-    
-    wg_ifaces = {'wg0': 'wg0', 'wg1': 'dev_wg'}
-    results = {}
-    
-    dev_path = '/proc/net/dev'
-    # 回退：容器网络不可见则读宿主机文件
-    lines = []
-    try:
-        with open(dev_path) as f:
-            lines = f.readlines()
-    except Exception:
-        try:
-            with open('/host_proc_net/dev') as f:
-                lines = f.readlines()
-        except Exception:
-            pass
-    
-    for display_name, iface in wg_ifaces.items():
-        info = {'ok': False, 'tx_bytes': 0, 'rx_bytes': 0, 'ip': None}
-        
-        # 从 /host_proc_net/dev 查找接口
-        for line in lines:
-            if line.strip().startswith(iface + ':'):
-                info['ok'] = True
-                parts = line.strip().split(':')[1].strip().split()
-                if len(parts) >= 16:
-                    info['rx_bytes'] = int(parts[0])
-                    info['tx_bytes'] = int(parts[8])
-                break
-        
-        results[display_name] = info
-    
-    return jsonify(results)
+    return jsonify(collect_wireguard_status())
 
 
 @app.route("/api/test-email", methods=["POST"])

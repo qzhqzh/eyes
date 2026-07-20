@@ -255,6 +255,17 @@ class FleetStoreTest(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["item_id"], first_id)
 
+    def test_operation_cooldown_is_claimed_atomically(self):
+        claimed, retry_after = models.claim_operation_cooldown("scan", 60, now=1000)
+        self.assertTrue(claimed)
+        self.assertEqual(retry_after, 0)
+        claimed, retry_after = models.claim_operation_cooldown("scan", 60, now=1010)
+        self.assertFalse(claimed)
+        self.assertEqual(retry_after, 50)
+        claimed, retry_after = models.claim_operation_cooldown("scan", 60, now=1060)
+        self.assertTrue(claimed)
+        self.assertEqual(retry_after, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

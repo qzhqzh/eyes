@@ -109,17 +109,17 @@ body {
     display: flex;
     width: 220px;
     flex-direction: column;
-    padding: var(--eyes-spacing);
-    background: var(--eyes-bg-sidebar);
-    border-right: 1px solid var(--eyes-border);
+    box-sizing: border-box;
+    padding: var(--eyes-spacing) 0 var(--eyes-spacing) var(--eyes-spacing);
+    background: transparent;
 }
 
 .eyes-brand {
     display: flex;
     align-items: center;
     gap: var(--eyes-spacing-sm);
-    padding: 0 var(--eyes-spacing-sm);
-    margin-bottom: var(--eyes-spacing-lg);
+    padding: 0 12px;
+    margin-bottom: 20px;
     color: var(--eyes-text-primary);
     font-size: var(--eyes-font-size-lg);
     font-weight: var(--eyes-font-weight-semibold);
@@ -137,10 +137,10 @@ body {
 
 .eyes-nav-link {
     display: flex;
-    min-height: 40px;
+    min-height: 38px;
     align-items: center;
     gap: var(--eyes-spacing-sm);
-    padding: var(--eyes-spacing-sm);
+    padding: 10px 0 10px 14px;
     border-radius: var(--eyes-radius);
     color: var(--eyes-text-muted);
     font-size: var(--eyes-font-size-md);
@@ -171,8 +171,9 @@ body {
 
 .eyes-app-main {
     min-width: 0;
-    margin-left: 220px;
-    padding: var(--eyes-spacing-lg);
+    margin-left: calc(220px + var(--eyes-spacing));
+    padding: var(--eyes-spacing);
+    padding-left: 0;
 }
 
 @media (max-width: 760px) {
@@ -185,6 +186,8 @@ body {
         overflow-x: auto;
         border-right: 0;
         border-bottom: 1px solid var(--eyes-border);
+        background: var(--eyes-bg-sidebar);
+        padding: var(--eyes-spacing);
     }
 
     .eyes-brand {

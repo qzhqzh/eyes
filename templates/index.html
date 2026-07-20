@@ -82,15 +82,15 @@
                     <div style="font-size: var(--eyes-font-size-lg); font-weight: var(--eyes-font-weight-medium); color: var(--eyes-text-primary);">Hub 本机健康监控</div>
                     <div style="font-size: var(--eyes-font-size-xs); color: var(--eyes-text-muted); margin-top: 2px;">仅统计当前 Hub 配置的检查项；全网联通与资源请查看 Fleet 节点</div>
                 </div>
-                <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-disabled); margin-left: 12px;" id="last-check-time">上次检查: --</span>
+                <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-disabled); margin-left: 12px;" id="last-check-time">上次检查：--</span>
             </div>
             <div class="flex gap-2">
-                <button class="e-btn e-btn-outline" onclick="scanAndCheck()">
+                <button class="e-btn e-btn-outline" id="scan-services-button" onclick="scanAndCheck()" type="button">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="11" cy="11" r="8"/>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"/>
                     </svg>
-                    扫描服务
+                    <span id="scan-services-label">扫描服务</span>
                 </button>
             </div>
         </div>
@@ -431,26 +431,79 @@ function activateTabFromHash() {
 window.addEventListener('hashchange', activateTabFromHash);
 
 // ========== 扫描并检查 ==========
-function scanAndCheck() {
+let scanCooldownTimer = null;
+
+function formatCheckDateTime(value) {
+    if (!value) return '--';
+    let parsed = value instanceof Date ? value : null;
+    if (!parsed) {
+        const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+            ? value.replace(' ', 'T') + 'Z'
+            : value;
+        parsed = new Date(normalized);
+    }
+    if (Number.isNaN(parsed.getTime())) return String(value);
+    return parsed.toLocaleString('zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    });
+}
+
+function startScanCooldown(seconds) {
+    const button = document.getElementById('scan-services-button');
+    const label = document.getElementById('scan-services-label');
+    let remaining = Math.max(1, Math.ceil(Number(seconds) || 60));
+    if (scanCooldownTimer) clearInterval(scanCooldownTimer);
+    button.disabled = true;
+    const update = () => {
+        label.textContent = remaining > 0 ? `${remaining} 秒后可扫描` : '扫描服务';
+        if (remaining <= 0) {
+            clearInterval(scanCooldownTimer);
+            scanCooldownTimer = null;
+            button.disabled = false;
+        }
+        remaining -= 1;
+    };
+    update();
+    scanCooldownTimer = setInterval(update, 1000);
+}
+
+async function scanAndCheck() {
+    const button = document.getElementById('scan-services-button');
+    const label = document.getElementById('scan-services-label');
+    button.disabled = true;
+    label.textContent = '正在扫描…';
     EyesUI.toast('正在扫描服务并执行检查...', 'info');
-    fetch('/api/scan', { method: 'POST' })
-        .then(r => r.json())
-        .then(scanData => {
-            return fetch('/api/check', { method: 'POST' })
-                .then(r => r.json())
-                .then(checkData => {
-                    const scanMsg = scanData.added > 0 ? `新增${scanData.added}项，` : '';
-                    EyesUI.toast(`扫描完成：${scanMsg}${checkData.passed}/${checkData.total} 通过`, 
-                                 checkData.failed > 0 ? 'error' : 'success');
-                    loadItems();
-                    loadAllItems();
-                    // 更新上次检查时间
-                    const now = new Date();
-                    const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
-                    const el = document.getElementById('last-check-time');
-                    if (el) el.textContent = `上次检查: ${timeStr}`;
-                });
-        });
+    try {
+        const scanResponse = await fetch('/api/scan', { method: 'POST' });
+        const scanData = await scanResponse.json();
+        if (scanResponse.status === 429) {
+            startScanCooldown(scanData.retry_after_seconds || 60);
+            EyesUI.toast(`扫描过于频繁，请等待 ${scanData.retry_after_seconds || 60} 秒`, 'warning');
+            return;
+        }
+        if (!scanResponse.ok) throw new Error(scanData.error || '服务扫描失败');
+        startScanCooldown(scanData.cooldown_seconds || 60);
+
+        const checkResponse = await fetch('/api/check', { method: 'POST' });
+        const checkData = await checkResponse.json();
+        if (!checkResponse.ok) throw new Error(checkData.error || '健康检查失败');
+        const scanMsg = scanData.added > 0 ? `新增${scanData.added}项，` : '';
+        EyesUI.toast(
+            `扫描完成：${scanMsg}${checkData.passed}/${checkData.total} 通过`,
+            checkData.failed > 0 ? 'error' : 'success'
+        );
+        loadItems();
+        loadAllItems();
+        const lastCheck = document.getElementById('last-check-time');
+        if (lastCheck) lastCheck.textContent = `上次检查：${formatCheckDateTime(new Date())}`;
+    } catch (error) {
+        EyesUI.toast(error.message || '扫描失败', 'error');
+        if (!scanCooldownTimer) {
+            button.disabled = false;
+            label.textContent = '扫描服务';
+        }
+    }
 }
 
 // ========== 加载所有服务（用于管理页） ==========
@@ -582,13 +635,9 @@ function loadItems() {
         allResults = results;
         
         // 更新上次检查时间
-        console.log('lastCheck:', lastCheck);
         if (lastCheck && lastCheck.time) {
-            // time 格式："2026-07-04 12:55:27" → 取 "12:55:27"
-            const timeStr = lastCheck.time.includes(' ') ? lastCheck.time.split(' ')[1] : lastCheck.time;
             const el = document.getElementById('last-check-time');
-            console.log('Setting time:', timeStr, 'element:', el);
-            if (el) el.textContent = `上次检查：${timeStr}`;
+            if (el) el.textContent = `上次检查：${formatCheckDateTime(lastCheck.time)}`;
         }
         
         renderItemsByType();
