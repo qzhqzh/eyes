@@ -199,6 +199,10 @@ HEALTH_GROUP_DEFAULT_INTERVALS = {
     "crond": 1800,
     "other": 600,
 }
+DASHBOARD_REFRESH_DEFAULT_INTERVALS = {
+    "wireguard": 60,
+    "network_speed": 600,
+}
 
 
 def collect_health_checks(item_types=None, wait=False):
@@ -460,11 +464,9 @@ def list_results():
 def check_intervals():
     """Get or update the automatic refresh interval for a dashboard group."""
     if request.method == "POST":
-        if os.environ.get("EYES_ENABLE_SCHEDULED_CHECKS") != "1":
-            return jsonify({"error": "scheduled health checks are disabled"}), 409
         data = request.get_json(silent=True) or {}
         group = data.get("group")
-        if group not in HEALTH_GROUP_TYPES:
+        if group not in HEALTH_GROUP_TYPES and group not in DASHBOARD_REFRESH_DEFAULT_INTERVALS:
             return jsonify({"error": "unknown health group"}), 400
         try:
             seconds = int(data.get("minutes")) * 60
@@ -472,12 +474,17 @@ def check_intervals():
             return jsonify({"error": "minutes must be an integer"}), 400
         if seconds < 60 or seconds > 86400:
             return jsonify({"error": "interval must be between 1 minute and 24 hours"}), 400
-        set_setting(f"check_interval_{group}", str(seconds))
-        job = scheduler.get_job(f"collect_health_{group}")
-        if job:
-            scheduler.reschedule_job(
-                f"collect_health_{group}", trigger="interval", seconds=seconds
-            )
+        if group in HEALTH_GROUP_TYPES:
+            if os.environ.get("EYES_ENABLE_SCHEDULED_CHECKS") != "1":
+                return jsonify({"error": "scheduled health checks are disabled"}), 409
+            set_setting(f"check_interval_{group}", str(seconds))
+            job = scheduler.get_job(f"collect_health_{group}")
+            if job:
+                scheduler.reschedule_job(
+                    f"collect_health_{group}", trigger="interval", seconds=seconds
+                )
+        else:
+            set_setting(f"dashboard_refresh_interval_{group}", str(seconds))
         return jsonify({"success": True, "group": group, "seconds": seconds})
 
     intervals = {
@@ -487,6 +494,12 @@ def check_intervals():
         for group in HEALTH_GROUP_TYPES
     }
     intervals["resources"] = int(get_setting("resource_collect_interval", "300"))
+    intervals.update({
+        group: int(get_setting(
+            f"dashboard_refresh_interval_{group}", str(default_seconds)
+        ))
+        for group, default_seconds in DASHBOARD_REFRESH_DEFAULT_INTERVALS.items()
+    })
     intervals["scheduled_checks_enabled"] = (
         os.environ.get("EYES_ENABLE_SCHEDULED_CHECKS") == "1"
     )

@@ -145,7 +145,7 @@
                     <div class="e-card-header">
                         <div class="e-card-title">资源状态</div>
                         <div class="flex items-center gap-2">
-                            <select class="e-select" style="width: 68px; padding: 2px 6px; font-size: 11px;" id="collect-interval" onchange="updateCollectInterval(this.value)">
+                            <select class="e-select resource-interval-select" style="width: 68px; padding: 2px 6px; font-size: 11px;" id="collect-interval" onchange="updateCollectInterval(this.value)">
                                 <option value="1">1分钟</option>
                                 <option value="5" selected>5分钟</option>
                                 <option value="10">10分钟</option>
@@ -170,7 +170,9 @@
                     <div class="e-card-header">
                         <div class="e-card-title">WireGuard</div>
                         <div class="flex items-center gap-2">
-                            <span style="font-size: 10px; color: var(--eyes-text-disabled);">1分钟</span>
+                            <select class="e-select" style="width: 60px; padding: 2px 4px; font-size: 10px;" id="wireguard-interval" onchange="updateDashboardInterval('wireguard', this.value)" aria-label="WireGuard 刷新周期">
+                                <option value="1" selected>1分钟</option><option value="5">5分钟</option><option value="10">10分钟</option><option value="30">30分钟</option><option value="60">60分钟</option>
+                            </select>
                             <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadWgStatus()" aria-label="刷新 WireGuard" title="刷新 WireGuard" style="padding: 4px;">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -190,7 +192,9 @@
                     <div class="e-card-header">
                         <div class="e-card-title">网速</div>
                         <div class="flex items-center gap-2">
-                            <span style="font-size: 10px; color: var(--eyes-text-disabled);">10分钟</span>
+                            <select class="e-select" style="width: 60px; padding: 2px 4px; font-size: 10px;" id="network-speed-interval" onchange="updateDashboardInterval('network_speed', this.value)" aria-label="网速刷新周期">
+                                <option value="1">1分钟</option><option value="5">5分钟</option><option value="10" selected>10分钟</option><option value="30">30分钟</option><option value="60">60分钟</option>
+                            </select>
                             <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadNetworkSpeed()" aria-label="刷新网速" title="刷新网速" style="padding: 4px;">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -684,10 +688,8 @@ function loadItems() {
     fetch('/api/resource-collect-interval')
         .then(r => r.json())
         .then(data => {
-            const select = document.getElementById('collect-interval');
-            if (select) {
-                select.value = Math.round(data.seconds / 60).toString();
-            }
+            resourceRefreshSeconds = data.seconds || 300;
+            syncResourceIntervalSelects();
         })
         .catch(() => {});
     
@@ -707,6 +709,8 @@ const HEALTH_GROUP_ITEM_TYPES = {
     other: ['http', 'port', 'command'],
 };
 const healthGroupIntervals = { docker: 600, systemd: 1800, crond: 1800, other: 600 };
+const dashboardRefreshIntervals = { wireguard: 60, network_speed: 600 };
+let resourceRefreshSeconds = 300;
 let healthAutoRefreshEnabled = true;
 const dashboardRefreshTimers = new Map();
 
@@ -777,6 +781,14 @@ async function setupDashboardRefreshTimers() {
     dashboardRefreshTimers.clear();
     const intervals = await fetch('/api/check-intervals').then(response => response.json());
     Object.assign(healthGroupIntervals, intervals);
+    dashboardRefreshIntervals.wireguard = intervals.wireguard || 60;
+    dashboardRefreshIntervals.network_speed = intervals.network_speed || 600;
+    const wireguardSelect = document.getElementById('wireguard-interval');
+    const networkSelect = document.getElementById('network-speed-interval');
+    if (wireguardSelect) wireguardSelect.value = String(dashboardRefreshIntervals.wireguard / 60);
+    if (networkSelect) networkSelect.value = String(dashboardRefreshIntervals.network_speed / 60);
+    resourceRefreshSeconds = intervals.resources || 300;
+    syncResourceIntervalSelects();
     healthAutoRefreshEnabled = intervals.scheduled_checks_enabled !== false;
     if (allItems.length) renderItemsByType();
     const schedule = (name, seconds, callback) => {
@@ -786,8 +798,8 @@ async function setupDashboardRefreshTimers() {
         dashboardRefreshTimers.set(name, timer);
     };
     schedule('resources', intervals.resources, () => refreshResources(false));
-    schedule('wireguard', 60, () => loadWgStatus());
-    schedule('network-speed', 600, () => loadNetworkSpeed());
+    schedule('wireguard', dashboardRefreshIntervals.wireguard, () => loadWgStatus());
+    schedule('network-speed', dashboardRefreshIntervals.network_speed, () => loadNetworkSpeed());
     for (const group of Object.keys(HEALTH_GROUP_ITEM_TYPES)) {
         schedule(group, intervals[group], () => refreshHealthGroup(group, false));
     }
@@ -807,6 +819,28 @@ async function updateHealthInterval(group, minutes) {
     healthGroupIntervals[group] = data.seconds;
     await setupDashboardRefreshTimers();
     EyesUI.toast(`${group} 更新频率已设为 ${minutes} 分钟`, 'success');
+}
+
+async function updateDashboardInterval(group, minutes) {
+    const response = await fetch('/api/check-intervals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ group, minutes: Number(minutes) }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        EyesUI.toast(data.error || '更新频率失败', 'error');
+        return;
+    }
+    dashboardRefreshIntervals[group] = data.seconds;
+    await setupDashboardRefreshTimers();
+    EyesUI.toast(`更新频率已设为 ${minutes} 分钟`, 'success');
+}
+
+function syncResourceIntervalSelects() {
+    document.querySelectorAll('.resource-interval-select').forEach(select => {
+        select.value = String(resourceRefreshSeconds / 60);
+    });
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -1010,7 +1044,9 @@ function renderItemsByType() {
                     <div class="e-card-title" style="color: ${color};">${title}</div>
                     <div class="flex items-center gap-2">
                         <div style="font-size: 11px; color: var(--eyes-text-muted);" id="${svgId}-value">-</div>
-                        <span style="font-size: 10px; color: var(--eyes-text-disabled);">5分钟</span>
+                        <select class="e-select resource-interval-select" style="width: 68px; padding: 2px 6px; font-size: 10px;" onchange="updateCollectInterval(this.value)" aria-label="${title} 刷新周期">
+                            <option value="1">1分钟</option><option value="5" selected>5分钟</option><option value="10">10分钟</option><option value="30">30分钟</option>
+                        </select>
                         <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadSystemStatsAndTrend(true)" aria-label="刷新${title}" title="刷新${title}" style="padding: 4px;">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -1067,6 +1103,7 @@ function renderItemsByType() {
     });
     
     container.innerHTML = html || '<div style="text-align:center;padding:40px;color:var(--eyes-text-muted)">暂无监控项，点击"扫描服务"开始</div>';
+    syncResourceIntervalSelects();
     
     // 加载系统资源
     if (document.getElementById('system-stats')) loadSystemStats();
@@ -1381,6 +1418,8 @@ function updateCollectInterval(minutes) {
     })
     .then(r => r.json())
     .then(() => {
+        resourceRefreshSeconds = Number(minutes) * 60;
+        syncResourceIntervalSelects();
         EyesUI.toast(`采集频率已更新为${minutes}分钟`, 'success');
         setupDashboardRefreshTimers().catch(() => {});
     })
