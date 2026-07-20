@@ -188,11 +188,19 @@ def ensure_local_hub_node():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("BEGIN IMMEDIATE")
-    cursor.execute("SELECT labels_json FROM nodes WHERE id = ?", (node_id,))
+    cursor.execute(
+        """
+        SELECT n.labels_json,
+               EXISTS(SELECT 1 FROM node_credentials c WHERE c.node_id = n.id) AS has_credential
+        FROM nodes n
+        WHERE n.id = ?
+        """,
+        (node_id,),
+    )
     existing = cursor.fetchone()
     if existing:
         source = _json_load(existing["labels_json"], {}).get("eyes.io/source")
-        if source not in {"legacy-local", "hub-runtime"}:
+        if existing["has_credential"] or source not in {"legacy-local", "hub-runtime"}:
             conn.close()
             raise ConflictError("configured Hub node ID belongs to a non-Hub node")
     cursor.execute(

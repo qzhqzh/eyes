@@ -21,12 +21,15 @@ class WebAppSmokeTest(unittest.TestCase):
 from app import app
 client = app.test_client()
 assert client.get('/fleet').status_code == 302
+assert client.get('/api/v1/fleet/summary').status_code == 401
 with client.session_transaction() as session:
     session['logged_in'] = True
 page = client.get('/fleet')
 assert page.status_code == 200
 assert b'eyes-sidebar' in page.data
 assert b'fleet-summary' in page.data
+assert b'href="/fleet"' in page.data
+assert 'Fleet 节点'.encode() in page.data
 assert client.get('/api/v1/fleet/summary').status_code == 200
 """
             result = subprocess.run(

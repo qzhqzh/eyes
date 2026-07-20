@@ -123,7 +123,13 @@ class FleetStoreTest(unittest.TestCase):
         self.assertEqual(workloads[0]["status"], "pending")
 
     def test_hub_node_id_cannot_overwrite_an_enrolled_agent(self):
-        enroll_node({"node_id": "real-agent", "hostname": "worker"})
+        enroll_node(
+            {
+                "node_id": "real-agent",
+                "hostname": "worker",
+                "labels": {"eyes.io/source": "hub-runtime"},
+            }
+        )
         with mock.patch.dict(os.environ, {"EYES_HUB_NODE_ID": "real-agent"}):
             with self.assertRaises(ConflictError):
                 ensure_local_hub_node()
