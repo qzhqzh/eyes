@@ -36,6 +36,8 @@ PROTOCOL_VERSION = "eyes.node.v1"
 def get_systemd_services():
     """获取 systemd 服务状态"""
     services = []
+    if not shutil.which("systemctl"):
+        return services
     try:
         r = subprocess.run(
             ["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--plain"],

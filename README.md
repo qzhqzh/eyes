@@ -188,6 +188,8 @@ python3 agent/eyes-agent.py \
 
 Linux 节点可执行 `sudo sh agent/install.sh` 安装 systemd 单元和配置模板，然后编辑 `/etc/eyes/agent.env`。
 
+OpenWrt 25+ 节点先安装 Python 3，再执行 `sh agent/install-openwrt.sh`。该安装器使用原生 procd 管理进程，不依赖 systemd 或 Docker；首次注册成功后应从 `/etc/eyes/agent.env` 删除 `EYES_ENROLL_TOKEN`。
+
 基础 Compose 不挂载 Docker Socket、Nginx 和 NAS，确保新机器可直接启动。需要旧版本机扫描能力时，先检查并修改 `docker-compose.host.example.yml` 的宿主机路径，再以 Compose override 启动；Docker Socket 等同高权限入口，不应在不可信 Hub 上启用。
 
 当前环境变量 Token 是第一阶段 bootstrap 机制，适合受控网络验证；一次性 Token、mTLS、调度器和执行器仍在后续阶段。已实现边界见 [docs/implementation-status.md](docs/implementation-status.md)。

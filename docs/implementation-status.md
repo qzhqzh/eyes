@@ -40,6 +40,7 @@
 - `node` 与 `legacy-server` 两种模式共存，旧部署没有被直接删除。
 - systemd 单元改为无入站 Node 模式、DynamicUser、StateDirectory 和基础沙箱设置。
 - `agent/install.sh` 将 Agent、客户端、systemd 单元和配置模板安装到单元声明的固定路径。
+- OpenWrt 节点可通过 `agent/install-openwrt.sh` 安装为原生 procd 服务。
 - `/fleet` 提供最小节点列表与 Node Detail 页面，可查看 Inventory 和 Resources 快照。
 
 ### 验证
