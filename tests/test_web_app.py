@@ -18,6 +18,8 @@ class WebAppSmokeTest(unittest.TestCase):
                 }
             )
             script = """
+import os
+from unittest import mock
 from app import app
 client = app.test_client()
 assert client.get('/fleet').status_code == 302
@@ -31,6 +33,21 @@ assert b'fleet-summary' in page.data
 assert b'href="/fleet"' in page.data
 assert 'Fleet 节点'.encode() in page.data
 assert client.get('/api/v1/fleet/summary').status_code == 200
+intervals = client.get('/api/check-intervals').get_json()
+assert intervals['resources'] == 300
+assert intervals['docker'] == 600
+assert intervals['systemd'] == 1800
+assert intervals['scheduled_checks_enabled'] is False
+assert client.post('/api/check-intervals', json={'group': 'docker', 'minutes': 30}).status_code == 409
+os.environ['EYES_ENABLE_SCHEDULED_CHECKS'] = '1'
+response = client.post('/api/check-intervals', json={'group': 'docker', 'minutes': 30})
+assert response.status_code == 200
+assert response.get_json()['seconds'] == 1800
+assert client.post('/api/check-intervals', json={'group': 'invalid', 'minutes': 5}).status_code == 400
+os.environ['EYES_AGENT_URL'] = 'http://127.0.0.1:9091'
+with mock.patch('app.scan_all', return_value={'docker': [], 'systemd': [], 'crond': []}) as scan:
+    assert client.post('/api/scan').status_code == 200
+    scan.assert_called_once_with('http://127.0.0.1:9091')
 """
             result = subprocess.run(
                 [sys.executable, "-c", script],

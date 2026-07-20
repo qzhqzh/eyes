@@ -9,14 +9,15 @@ import secrets
 import subprocess
 import re
 import threading
+from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from apscheduler.schedulers.background import BackgroundScheduler
 from models import (
     init_db, init_default_settings, get_setting, set_setting, get_all_settings,
     get_check_items, get_all_check_items, add_check_item, update_check_item, delete_check_item,
     update_item_status, get_check_results, import_from_yaml, replace_check_results,
-    save_resource_metrics, get_resource_metrics, clear_old_metrics, DB_PATH,
-    claim_operation_cooldown
+    replace_check_results_for_types, save_resource_metrics, get_resource_metrics,
+    get_latest_resource_metric, clear_old_metrics, DB_PATH, claim_operation_cooldown
 )
 from checker import run_check, run_all_checks
 from bark import send_bark_alert, send_bark_recovery
@@ -25,7 +26,7 @@ from scanner import scan_all
 from fleet import init_fleet_db, ensure_local_hub_node
 from hub_node import refresh_local_hub_node
 from hub_api import hub_api
-from network_status import collect_wireguard_status
+from network_status import collect_wireguard_status, mounted_filesystem_type
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
@@ -136,13 +137,20 @@ def collect_stats():
     
     # NAS 盘使用率
     try:
-        r = subprocess.run(
-            ["df", "-h", "/mnt/nas"],
-            capture_output=True, text=True, timeout=5
-        )
-        if r.returncode == 0:
+        stats['nas'] = -1
+        nas_path = os.environ.get("EYES_NAS_PATH", "/mnt/nas")
+        allowed_nas_types = {
+            value.strip() for value in os.environ.get(
+                "EYES_NAS_FS_TYPES", "cifs,nfs,nfs4,smb3,fuse.sshfs"
+            ).split(",") if value.strip()
+        }
+        filesystem_type = mounted_filesystem_type(nas_path)
+        if filesystem_type in allowed_nas_types:
+            r = subprocess.run(
+                ["df", "-h", nas_path], capture_output=True, text=True, timeout=5
+            )
             lines = r.stdout.strip().split("\n")
-            if len(lines) >= 2:
+            if r.returncode == 0 and len(lines) >= 2:
                 parts = lines[1].split()
                 if len(parts) >= 5:
                     stats['nas'] = parts[4].replace('%', '')
@@ -150,8 +158,6 @@ def collect_stats():
                     stats['nas_total'] = parts[1]
                 else:
                     stats['nas'] = -1
-            else:
-                stats['nas'] = -1
         else:
             stats['nas'] = -1
     except Exception as e:
@@ -181,28 +187,48 @@ def collect_stats():
 _health_check_thread_lock = threading.Lock()
 _service_scan_thread_lock = threading.Lock()
 SERVICE_SCAN_COOLDOWN_SECONDS = 60
+HEALTH_GROUP_TYPES = {
+    "docker": {"docker"},
+    "systemd": {"systemd"},
+    "crond": {"crond"},
+    "other": {"http", "port", "command"},
+}
+HEALTH_GROUP_DEFAULT_INTERVALS = {
+    "docker": 600,
+    "systemd": 1800,
+    "crond": 1800,
+    "other": 600,
+}
 
 
-def collect_health_checks():
+def collect_health_checks(item_types=None, wait=False):
     """Run the configured Hub-local checks and persist their latest result."""
-    if not _health_check_thread_lock.acquire(blocking=False):
+    if not _health_check_thread_lock.acquire(blocking=wait):
         return {"success": False, "busy": True, "error": "health check is already running"}
     lock_file = None
     try:
         lock_file = open(f"{DB_PATH}.health.lock", "a", encoding="utf-8")
         try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_flags = fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB
+            fcntl.flock(lock_file.fileno(), lock_flags)
         except BlockingIOError:
             return {"success": False, "busy": True, "error": "health check is already running"}
 
         items = get_check_items()
-        enabled_items = [item for item in items if item["enabled"]]
+        requested_types = set(item_types or [])
+        enabled_items = [
+            item for item in items
+            if item["enabled"] and (not requested_types or item["type"] in requested_types)
+        ]
         results = run_all_checks(enabled_items)
         failures = []
         for result in results:
             if not result["ok"]:
                 failures.append({"name": result["name"], "detail": result["detail"]})
-        replace_check_results(results)
+        if requested_types:
+            replace_check_results_for_types(results, requested_types)
+        else:
+            replace_check_results(results)
 
         settings = get_all_settings()
         if settings.get("bark_enabled") == "1" and failures:
@@ -218,6 +244,7 @@ def collect_health_checks():
             "passed": sum(1 for result in results if result["ok"]),
             "failed": len(failures),
             "failures": failures,
+            "types": sorted(requested_types),
         }
     finally:
         if lock_file is not None:
@@ -231,16 +258,23 @@ scheduler = BackgroundScheduler()
 interval = int(get_setting("resource_collect_interval", "300"))
 scheduler.add_job(id='collect_resource_metrics', func=collect_stats, trigger='interval', seconds=interval, replace_existing=True)
 if os.environ.get("EYES_ENABLE_SCHEDULED_CHECKS") == "1":
-    check_interval = int(get_setting("check_interval", "600"))
-    if check_interval < 10:
-        raise RuntimeError("check_interval must be at least 10 seconds")
-    scheduler.add_job(
-        id='collect_health_checks',
-        func=collect_health_checks,
-        trigger='interval',
-        seconds=check_interval,
-        replace_existing=True,
-    )
+    for offset, (group, item_types) in enumerate(HEALTH_GROUP_TYPES.items(), start=1):
+        seconds = int(get_setting(
+            f"check_interval_{group}", str(HEALTH_GROUP_DEFAULT_INTERVALS[group])
+        ))
+        if seconds < 60:
+            raise RuntimeError(f"check_interval_{group} must be at least 60 seconds")
+        scheduler.add_job(
+            id=f'collect_health_{group}',
+            func=collect_health_checks,
+            args=[item_types, True],
+            trigger='interval',
+            seconds=seconds,
+            next_run_time=datetime.now() + timedelta(seconds=offset * 5),
+            coalesce=True,
+            max_instances=1,
+            replace_existing=True,
+        )
 scheduler.add_job(id='clear_old_metrics', func=clear_old_metrics, trigger='interval', hours=24)
 scheduler.add_job(
     id='refresh_local_hub_node',
@@ -318,7 +352,10 @@ def fleet_view():
 @login_required
 def get_settings():
     """获取所有设置"""
-    return jsonify(get_all_settings())
+    settings = get_all_settings()
+    if os.environ.get("EYES_AGENT_URL"):
+        settings["agent_url"] = os.environ["EYES_AGENT_URL"]
+    return jsonify(settings)
 
 
 @app.route("/api/settings", methods=["POST"])
@@ -384,15 +421,76 @@ def remove_item(item_id):
 @login_required
 def run_checks():
     """运行检查"""
-    result = collect_health_checks()
-    return jsonify(result), 409 if result.get("busy") else 200
+    group = request.args.get("group") or (request.get_json(silent=True) or {}).get("group")
+    if group:
+        item_types = HEALTH_GROUP_TYPES.get(group)
+        if item_types is None:
+            return jsonify({"error": "unknown health group"}), 400
+        result = collect_health_checks(item_types)
+        result["group"] = group
+        return jsonify(result), 409 if result.get("busy") else 200
+
+    group_results = []
+    for group_name, item_types in HEALTH_GROUP_TYPES.items():
+        result = collect_health_checks(item_types, wait=True)
+        result["group"] = group_name
+        group_results.append(result)
+    return jsonify({
+        "success": all(result.get("success") for result in group_results),
+        "total": sum(result.get("total", 0) for result in group_results),
+        "passed": sum(result.get("passed", 0) for result in group_results),
+        "failed": sum(result.get("failed", 0) for result in group_results),
+        "groups": group_results,
+    })
 
 
 @app.route("/api/results", methods=["GET"])
 @login_required
 def list_results():
     """获取检查结果"""
-    return jsonify(get_check_results())
+    item_type = request.args.get("type")
+    results = get_check_results()
+    if item_type:
+        results = [result for result in results if result["item_type"] == item_type]
+    return jsonify(results)
+
+
+@app.route("/api/check-intervals", methods=["GET", "POST"])
+@login_required
+def check_intervals():
+    """Get or update the automatic refresh interval for a dashboard group."""
+    if request.method == "POST":
+        if os.environ.get("EYES_ENABLE_SCHEDULED_CHECKS") != "1":
+            return jsonify({"error": "scheduled health checks are disabled"}), 409
+        data = request.get_json(silent=True) or {}
+        group = data.get("group")
+        if group not in HEALTH_GROUP_TYPES:
+            return jsonify({"error": "unknown health group"}), 400
+        try:
+            seconds = int(data.get("minutes")) * 60
+        except (TypeError, ValueError):
+            return jsonify({"error": "minutes must be an integer"}), 400
+        if seconds < 60 or seconds > 86400:
+            return jsonify({"error": "interval must be between 1 minute and 24 hours"}), 400
+        set_setting(f"check_interval_{group}", str(seconds))
+        job = scheduler.get_job(f"collect_health_{group}")
+        if job:
+            scheduler.reschedule_job(
+                f"collect_health_{group}", trigger="interval", seconds=seconds
+            )
+        return jsonify({"success": True, "group": group, "seconds": seconds})
+
+    intervals = {
+        group: int(get_setting(
+            f"check_interval_{group}", str(HEALTH_GROUP_DEFAULT_INTERVALS[group])
+        ))
+        for group in HEALTH_GROUP_TYPES
+    }
+    intervals["resources"] = int(get_setting("resource_collect_interval", "300"))
+    intervals["scheduled_checks_enabled"] = (
+        os.environ.get("EYES_ENABLE_SCHEDULED_CHECKS") == "1"
+    )
+    return jsonify(intervals)
 
 
 @app.route("/api/scan", methods=["POST"])
@@ -411,7 +509,7 @@ def scan_services():
             ), 429
 
         settings = get_all_settings()
-        agent_url = settings.get("agent_url", "")
+        agent_url = os.environ.get("EYES_AGENT_URL") or settings.get("agent_url", "")
         results = scan_all(agent_url if agent_url else None)
 
         existing_items = get_check_items()
@@ -454,10 +552,10 @@ def test_bark():
     return jsonify({"success": result})
 
 
-@app.route("/api/system-stats", methods=["GET"])
+@app.route("/api/system-stats", methods=["GET", "POST"])
 @login_required
 def system_stats():
-    """获取系统资源统计（实时）"""
+    """获取实时系统资源统计，保留原有 API 语义。"""
     stats = collect_stats()
     
     # 运行时间
@@ -472,6 +570,14 @@ def system_stats():
         print(f"Uptime error: {e}")
         stats['uptime'] = 'unknown'
     
+    return jsonify(stats)
+
+
+@app.route("/api/system-stats/latest", methods=["GET"])
+@login_required
+def latest_system_stats():
+    """获取后台最近一次采集的资源快照。"""
+    stats = get_latest_resource_metric() or collect_stats()
     return jsonify(stats)
 
 

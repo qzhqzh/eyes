@@ -1,8 +1,29 @@
 #!/usr/bin/env python3
 """Read host/container network interface counters for the Web dashboard."""
 
+import os
+
 
 WIREGUARD_INTERFACES = {"wg0": "wg0", "wg1": "dev_wg"}
+
+
+def mounted_filesystem_type(path, mountinfo_path="/proc/self/mountinfo"):
+    """Return the filesystem type only when path is an explicit mount point."""
+    target = os.path.normpath(path)
+    try:
+        with open(mountinfo_path, encoding="utf-8") as handle:
+            for line in handle:
+                fields = line.split()
+                if "-" not in fields or len(fields) < 7:
+                    continue
+                mount_point = fields[4].replace("\\040", " ").replace("\\011", "\t")
+                if os.path.normpath(mount_point) != target:
+                    continue
+                separator = fields.index("-")
+                return fields[separator + 1] if len(fields) > separator + 1 else None
+    except OSError:
+        return None
+    return None
 
 
 def collect_wireguard_status(paths=None):

@@ -18,17 +18,12 @@ import http.client
 from datetime import datetime, timezone
 
 
-# Agent URL 缓存
-_agent_url = None
-
-
 def _get_agent_url():
-    """获取 agent URL"""
-    global _agent_url
-    if _agent_url is None:
-        from models import get_setting
-        _agent_url = get_setting("agent_url", "http://host.docker.internal:9091")
-    return _agent_url
+    """获取 agent URL，允许设置修改后立即生效。"""
+    from models import get_setting
+    return os.environ.get("EYES_AGENT_URL") or get_setting(
+        "agent_url", "http://127.0.0.1:9091"
+    )
 
 
 def _query_docker_api(endpoint):
@@ -100,10 +95,11 @@ def check_docker(target):
         return False, str(e)
 
 
-def check_systemd(target):
+def check_systemd(target, services=None):
     """检查 Systemd 服务状态"""
     # 通过 agent API
-    services = _query_agent_api("/api/systemd")
+    if services is None:
+        services = _query_agent_api("/api/systemd")
     if services and isinstance(services, list):
         service_name = target.replace(".service", "")
         for svc in services:
@@ -191,10 +187,11 @@ def check_command(command, timeout=30):
         return False, str(e)
 
 
-def check_crond(target):
+def check_crond(target, crontab_data=None):
     """检查 crontab 中是否存在指定任务"""
     # 通过 agent API
-    crontab_data = _query_agent_api("/api/crontab")
+    if crontab_data is None:
+        crontab_data = _query_agent_api("/api/crontab")
     if crontab_data and isinstance(crontab_data, dict):
         for user, tasks in crontab_data.items():
             if isinstance(tasks, list):
@@ -224,7 +221,7 @@ def check_crond(target):
         return False, str(e)
 
 
-def run_check(item_type, target):
+def run_check(item_type, target, prefetched=None):
     """运行单个检查项"""
     checkers = {
         "docker": check_docker,
@@ -239,6 +236,10 @@ def run_check(item_type, target):
     if not checker:
         return False, f"未知类型: {item_type}"
     
+    if item_type == "systemd" and prefetched is not None:
+        return checker(target, prefetched.get("systemd"))
+    if item_type == "crond" and prefetched is not None:
+        return checker(target, prefetched.get("crond"))
     return checker(target)
 
 
@@ -251,12 +252,19 @@ def run_all_checks(items):
     Returns:
         [{"id": ..., "type": ..., "name": ..., "ok": ..., "detail": ...}]
     """
+    item_types = {item["type"] for item in items if item.get("enabled", True)}
+    prefetched = {}
+    if "systemd" in item_types:
+        prefetched["systemd"] = _query_agent_api("/api/systemd") or []
+    if "crond" in item_types:
+        prefetched["crond"] = _query_agent_api("/api/crontab") or {}
+
     results = []
     for item in items:
         if not item.get("enabled", True):
             continue
         
-        ok, detail = run_check(item["type"], item["target"])
+        ok, detail = run_check(item["type"], item["target"], prefetched)
         results.append({
             "id": item["id"],
             "type": item["type"],

@@ -88,6 +88,22 @@ class FleetStoreTest(unittest.TestCase):
         self.assertEqual(node["roles"], ["gpu-worker"])
         self.assertEqual(node["snapshots"]["resources"]["generation"], 1)
 
+    def test_partial_health_results_preserve_other_groups(self):
+        docker_id = models.add_check_item("docker", "Web", "web")
+        systemd_id = models.add_check_item("systemd", "SSH", "ssh.service")
+        models.replace_check_results([
+            {"id": docker_id, "type": "docker", "name": "Web", "ok": True, "detail": "running"},
+            {"id": systemd_id, "type": "systemd", "name": "SSH", "ok": True, "detail": "active"},
+        ])
+
+        models.replace_check_results_for_types([
+            {"id": docker_id, "type": "docker", "name": "Web", "ok": False, "detail": "stopped"},
+        ], {"docker"})
+
+        results = {result["item_type"]: result for result in models.get_check_results()}
+        self.assertFalse(bool(results["docker"]["ok"]))
+        self.assertEqual(results["systemd"]["detail"], "active")
+
     def test_stale_heartbeat_and_conflicting_snapshot_are_rejected(self):
         enroll_node({"node_id": "node-2", "hostname": "worker-2"})
         with self.assertRaises(ValueError):
