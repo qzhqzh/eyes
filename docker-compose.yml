@@ -19,3 +19,4 @@ services:
       EYES_NAS_PATH: /mnt/nas
       EYES_NAS_FS_TYPES: ${EYES_NAS_FS_TYPES:-cifs,nfs,nfs4,smb3,fuse.sshfs}
       EYES_AGENT_URL: ${EYES_AGENT_URL:-http://127.0.0.1:9091}
+      EYES_WIREGUARD_PROBES: ${EYES_WIREGUARD_PROBES:-}

@@ -82,9 +82,8 @@
                     <div style="font-size: var(--eyes-font-size-lg); font-weight: var(--eyes-font-weight-medium); color: var(--eyes-text-primary);">Hub 本机健康监控</div>
                     <div style="font-size: var(--eyes-font-size-xs); color: var(--eyes-text-muted); margin-top: 2px;">仅统计当前 Hub 配置的检查项；全网联通与资源请查看 Fleet 节点</div>
                 </div>
-                <span style="font-size: var(--eyes-font-size-sm); color: var(--eyes-text-disabled); margin-left: 12px;" id="last-check-time">上次检查：--</span>
             </div>
-            <div class="flex gap-2">
+            <div class="flex flex-col items-center gap-1">
                 <button class="e-btn e-btn-outline" id="scan-services-button" onclick="scanAndCheck()" type="button">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="11" cy="11" r="8"/>
@@ -92,13 +91,17 @@
                     </svg>
                     <span id="scan-services-label">扫描服务</span>
                 </button>
+                <span style="font-size: var(--eyes-font-size-xs); color: var(--eyes-text-disabled);" id="last-check-time">上次检查：--</span>
             </div>
         </div>
         
         <!-- 统计数据 -->
-        <div class="flex gap-4 mb-4" id="summary">
+        <div class="flex gap-3.5 mb-4" id="summary" style="flex-wrap: wrap; align-items: stretch;">
             <!-- 健康度环形图卡片 -->
-            <div class="e-card" style="width: 180px;">
+            <div class="e-card" style="width: 160px; position: relative;">
+                <button class="e-btn e-btn-sm e-btn-ghost" onclick="refreshAllHealthGroups()" aria-label="刷新健康度" title="刷新健康度" style="position: absolute; top: 8px; right: 8px; padding: 4px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                </button>
                 <div class="e-card-body" style="display: flex; align-items: center; gap: 12px;">
                     <div id="health-ring"></div>
                     <div>
@@ -109,7 +112,10 @@
             </div>
             
             <!-- 服务统计：上排数字 + 下排类型 -->
-            <div class="e-card" style="width: 300px;">
+            <div class="e-card" style="width: 260px; position: relative;">
+                <button class="e-btn e-btn-sm e-btn-ghost" onclick="refreshAllHealthGroups()" aria-label="刷新服务统计" title="刷新服务统计" style="position: absolute; top: 8px; right: 8px; padding: 4px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                </button>
                 <div class="e-card-body">
                     <div class="flex flex-col gap-2">
                         <div class="flex gap-4">
@@ -134,7 +140,7 @@
             </div>
             
             <!-- 资源状态 -->
-            <div id="compact-status-card" style="width: 400px; flex-shrink: 0;">
+            <div id="compact-status-card" style="min-width: 320px; flex: 1 1 340px;">
                 <div class="e-card">
                     <div class="e-card-header">
                         <div class="e-card-title">资源状态</div>
@@ -157,17 +163,40 @@
                     </div>
                 </div>
             </div>
+
+            <!-- WireGuard -->
+            <div style="width: 190px; flex-shrink: 0;">
+                <div class="e-card" style="height: 100%;">
+                    <div class="e-card-header">
+                        <div class="e-card-title">WireGuard</div>
+                        <div class="flex items-center gap-2">
+                            <span style="font-size: 10px; color: var(--eyes-text-disabled);">1分钟</span>
+                            <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadWgStatus()" aria-label="刷新 WireGuard" title="刷新 WireGuard" style="padding: 4px;">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="e-card-body">
+                        <div id="wg-list" style="display: grid; grid-template-columns: 1fr; gap: 8px;"></div>
+                    </div>
+                </div>
+            </div>
             
             <!-- 网速测试 -->
-            <div style="width: 200px; flex-shrink: 0;">
+            <div style="width: 180px; flex-shrink: 0;">
                 <div class="e-card">
                     <div class="e-card-header">
                         <div class="e-card-title">网速</div>
-                        <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadNetworkSpeed()" style="padding: 4px;">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                            </svg>
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <span style="font-size: 10px; color: var(--eyes-text-disabled);">10分钟</span>
+                            <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadNetworkSpeed()" aria-label="刷新网速" title="刷新网速" style="padding: 4px;">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="e-card-body" id="speed-list"></div>
                 </div>
@@ -727,6 +756,17 @@ async function refreshHealthGroup(group, runCheck = false) {
     return checkData;
 }
 
+async function refreshAllHealthGroups() {
+    try {
+        for (const group of Object.keys(HEALTH_GROUP_ITEM_TYPES)) {
+            await refreshHealthGroup(group, true);
+        }
+        EyesUI.toast('服务状态已刷新', 'success');
+    } catch (error) {
+        EyesUI.toast(error.message || '服务状态刷新失败', 'error');
+    }
+}
+
 async function refreshResources(runCollect = false) {
     await loadSystemStats(runCollect);
     await loadResourceTrend();
@@ -746,6 +786,8 @@ async function setupDashboardRefreshTimers() {
         dashboardRefreshTimers.set(name, timer);
     };
     schedule('resources', intervals.resources, () => refreshResources(false));
+    schedule('wireguard', 60, () => loadWgStatus());
+    schedule('network-speed', 600, () => loadNetworkSpeed());
     for (const group of Object.keys(HEALTH_GROUP_ITEM_TYPES)) {
         schedule(group, intervals[group], () => refreshHealthGroup(group, false));
     }
@@ -853,6 +895,7 @@ function renderItemsByType() {
         const pageSize = 5;
         const configurableInterval = ['docker', 'systemd', 'crond'].includes(type);
         const intervalMinutes = Math.round((healthGroupIntervals[type] || 600) / 60);
+        const refreshGroup = configurableInterval ? type : 'other';
         
         // 初始化分页状态
         if (!itemsPagination[type]) {
@@ -885,6 +928,11 @@ function renderItemsByType() {
                             ${[5, 10, 30, 60].map(minutes => `<option value="${minutes}" ${minutes === intervalMinutes ? 'selected' : ''}>${minutes}分钟</option>`).join('')}
                         </select>
                         ${healthAutoRefreshEnabled ? '' : '<span style="font-size:10px;color:var(--eyes-warning);">自动检查未启用</span>'}` : ''}
+                        <button class="e-btn e-btn-sm e-btn-ghost" onclick="refreshHealthGroup('${refreshGroup}', true).catch(error => EyesUI.toast(error.message || '刷新失败', 'error'))" aria-label="刷新${typeNames[type] || type}" title="刷新${typeNames[type] || type}" style="padding: 4px;">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </button>
                         <input type="text" class="e-input" style="width: 140px; padding: 4px 8px; font-size: 12px;" 
                                placeholder="搜索..." 
                                value="${itemsPagination[type].search}"
@@ -960,7 +1008,15 @@ function renderItemsByType() {
             <div class="e-card" style="flex: 1;">
                 <div class="e-card-header">
                     <div class="e-card-title" style="color: ${color};">${title}</div>
-                    <div style="font-size: 11px; color: var(--eyes-text-muted);" id="${svgId}-value">-</div>
+                    <div class="flex items-center gap-2">
+                        <div style="font-size: 11px; color: var(--eyes-text-muted);" id="${svgId}-value">-</div>
+                        <span style="font-size: 10px; color: var(--eyes-text-disabled);">5分钟</span>
+                        <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadSystemStatsAndTrend(true)" aria-label="刷新${title}" title="刷新${title}" style="padding: 4px;">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="e-card-body" style="padding: var(--eyes-spacing-sm) var(--eyes-spacing-sm) 4px;">
                     <div style="height: 130px; position: relative;">
@@ -987,23 +1043,6 @@ function renderItemsByType() {
     if (row1Cards.length > 0) {
         html += `<div class="flex gap-3.5">${row1Cards.join('')}</div>`;
     }
-    
-    // 监控项下半部分：WireGuard（独占整行）
-    html += `\
-        <div class="e-card">
-            <div class="e-card-header">
-                <div class="e-card-title">WireGuard</div>
-                <button class="e-btn e-btn-sm e-btn-ghost" onclick="loadWgStatus()" style="padding: 4px;">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                </button>
-            </div>
-            <div class="e-card-body">
-                <div id="wg-list" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 16px;"></div>
-            </div>
-        </div>
-    `;
     
     // 趋势卡片（2x2 网格）
     html += `
@@ -1163,18 +1202,26 @@ function loadSystemStatsAndTrend(runCollect = true) {
 }
 
 // ========== WireGuard 状态 ==========
+function escapeHtml(value) {
+    return String(value).replace(/[&<>'"]/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    })[character]);
+}
+
 function loadWgStatus() {
     const list = document.getElementById('wg-list');
     if (!list) return;
     list.innerHTML = '<div style="text-align:center;padding:8px;color:var(--eyes-text-muted);font-size:11px;">检测中...</div>';
     
-    fetch('/api/wg-status')
+    return fetch('/api/wg-status')
         .then(r => r.json())
         .then(data => {
             const entries = Object.entries(data);
             if (!list) return;
             
             list.innerHTML = entries.map(([key, v]) => {
+                const interfaceUp = v && (v.interface_up !== undefined ? v.interface_up : v.ok);
+                const peers = v && Array.isArray(v.peers) ? v.peers : [];
                 const ok = v && v.ok;
                 const color = ok ? 'var(--eyes-success)' : 'var(--eyes-danger)';
                 
@@ -1185,13 +1232,29 @@ function loadWgStatus() {
                 };
                 const tx = v && v.tx_bytes ? fmtBytes(v.tx_bytes) : '-';
                 const rx = v && v.rx_bytes ? fmtBytes(v.rx_bytes) : '-';
+                const onlinePeers = peers.filter(peer => peer.online).length;
+                const reachability = peers.some(peer => peer.status_source === 'reachability');
+                const peerAddress = peers.length === 1
+                    ? (peers[0].allowed_ips || '').split('/')[0]
+                    : `${onlinePeers}/${peers.length} peers`;
+                const state = !interfaceUp ? '接口关闭' : ok ? 'Peer 在线' : peers.length ? 'Peer 离线' : '接口在线';
+                const detail = peers.length
+                    ? `${peerAddress} · ${reachability ? (ok ? '节点可达' : '节点不可达') : (ok ? '近期握手' : '无近期握手')}`
+                    : `↑${tx} ↓${rx}`;
+                const safeKey = escapeHtml(key);
+                const safeState = escapeHtml(state);
+                const safeDetail = escapeHtml(detail);
                 
                 return `\
-                    <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--eyes-bg-input);border-radius:var(--eyes-radius-sm);">
+                    <div style="display:flex;align-items:flex-start;gap:8px;padding:7px 8px;background:var(--eyes-bg-input);border-radius:var(--eyes-radius-sm);">
                         <span style="width:6px;height:6px;border-radius:50%;background:${color};flex-shrink:0;box-shadow:0 0 6px ${color}80;"></span>
-                        <span style="flex:1;font-size:12px;color:var(--eyes-text-secondary);font-weight:500;">${key}</span>
-                        <span style="font-size:10px;color:var(--eyes-text-muted);font-variant-numeric:tabular-nums;">↑${tx} ↓${rx}</span>
-                        <span style="font-size:10px;font-weight:600;color:${color};">${ok ? 'UP' : 'DOWN'}</span>
+                        <div style="min-width:0;flex:1;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                                <span style="font-size:12px;color:var(--eyes-text-secondary);font-weight:500;">${safeKey}</span>
+                                <span style="font-size:10px;font-weight:600;color:${color};white-space:nowrap;">${safeState}</span>
+                            </div>
+                            <div style="margin-top:2px;font-size:9px;color:var(--eyes-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${safeDetail}">${safeDetail}</div>
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -1213,7 +1276,7 @@ function loadNetworkSpeed() {
     if (!list) return;
     list.innerHTML = '<div style="text-align:center;padding:8px;color:var(--eyes-text-muted);font-size:11px;">测试中...</div>';
     
-    fetch('/api/network-speed')
+    return fetch('/api/network-speed')
         .then(r => r.json())
         .then(data => {
             const entries = Object.entries(data);

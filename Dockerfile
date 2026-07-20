@@ -5,6 +5,7 @@ WORKDIR /app
 # 安装系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    iputils-ping \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
