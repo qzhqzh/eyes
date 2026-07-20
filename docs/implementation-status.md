@@ -15,7 +15,7 @@
   - `resource_claims`
   - `leases`
   - `audit_events`
-- 启动时创建 `hub-local` 兼容节点，为旧本机数据迁移预留身份。
+- 启动时创建 `hub-local`，发布 Hub runtime 心跳和 Inventory/Resources 快照，并每 30 秒刷新。
 - Flask 注册 `/api/v1` Blueprint。
 - Web 登录用户可以查看节点、节点快照和 pending Workload。
 
@@ -41,7 +41,9 @@
 - systemd 单元改为无入站 Node 模式、DynamicUser、StateDirectory 和基础沙箱设置。
 - `agent/install.sh` 将 Agent、客户端、systemd 单元和配置模板安装到单元声明的固定路径。
 - OpenWrt 节点可通过 `agent/install-openwrt.sh` 安装为原生 procd 服务。
-- `/fleet` 提供最小节点列表与 Node Detail 页面，可查看 Inventory 和 Resources 快照。
+- `/fleet` 提供统一导航、全网联通与在线资源汇总、结构化 Node Detail，并保留折叠原始快照用于诊断。
+- 节点列表根据最后心跳派生 `online/stale/offline/unknown`，不会把离线节点的旧快照计入在线资源容量。
+- 旧版 Hub 本机健康检查可通过 `EYES_ENABLE_SCHEDULED_CHECKS=1` 由后台按 `check_interval` 周期运行，统计口径与 Fleet 明确分离；已有外部 cron 时默认关闭以避免重复告警。
 
 ### 验证
 
@@ -56,8 +58,8 @@
 - 命令表和拉取/确认 API 已存在，但 Agent 不执行任何 Hub 命令。
 - Hub 的 `wait` 参数尚未实现真正长轮询。
 - `hub-local` 还没有把旧 `check_items` 和 `resource_metrics` 完整迁移到 node_id 模型。
-- 节点状态尚未根据心跳窗口自动从 `ready` 转为 `stale`。
-- Fleet 已有最小页面，但尚未提供资源聚合视图和 Topology 页面。
+- 联通状态当前是查询时派生值，尚未实现持久化状态 controller 与状态变更事件。
+- Fleet 尚未提供 Topology 页面，也没有 physical、allocatable、reserved、observed used 的完整资源账本。
 
 ## 安全限制
 
@@ -73,6 +75,6 @@
 ## 下一批建议
 
 1. 一次性 enrollment token、撤销/轮换和节点批准流程。
-2. `ready/stale/offline` 状态控制器与 Fleet 资源聚合视图。
-3. 将旧本机检查和资源数据归属到 `hub-local`。
+2. 持久化联通状态 controller、状态变更事件与告警。
+3. 将旧本机检查和资源数据归属到具体 `node_id`，并去重 Hub runtime 与宿主机 Agent。
 4. 实现只读资源匹配解释，再实现 Reservation/Lease，不直接跳到命令执行。

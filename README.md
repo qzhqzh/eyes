@@ -182,7 +182,7 @@ python3 agent/eyes-agent.py \
   --once
 ```
 
-登录 `http://<hub-ip>:8090/` 查看原有监控页面，登录后进入 `http://<hub-ip>:8090/fleet` 查看已连接节点和资源快照。管理密码来自 `.env` 的 `EYES_WEB_PASSWORD`。
+登录 `http://<hub-ip>:8090/` 查看 Hub 本机健康检查，进入 `http://<hub-ip>:8090/fleet` 查看全部节点的联通状态、在线资源汇总和结构化节点详情。两者的统计口径不同，详见 [观测作用域与统计口径](docs/observability-scopes.md)。管理密码来自 `.env` 的 `EYES_WEB_PASSWORD`。
 
 远程节点默认只连接 HTTPS Hub；`http://127.0.0.1`、`http://localhost` 仅用于本机开发。受控测试网络若暂时没有 TLS，可显式添加 `--allow-insecure-http`。
 

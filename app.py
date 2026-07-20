@@ -3,23 +3,26 @@
 
 import os
 import functools
+import fcntl
 import hmac
 import secrets
 import subprocess
 import re
+import threading
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from apscheduler.schedulers.background import BackgroundScheduler
 from models import (
     init_db, init_default_settings, get_setting, set_setting, get_all_settings,
     get_check_items, get_all_check_items, add_check_item, update_check_item, delete_check_item,
-    update_item_status, save_check_result, get_check_results, clear_check_results, import_from_yaml,
-    save_resource_metrics, get_resource_metrics, clear_old_metrics
+    update_item_status, get_check_results, import_from_yaml, replace_check_results,
+    save_resource_metrics, get_resource_metrics, clear_old_metrics, DB_PATH
 )
 from checker import run_check, run_all_checks
 from bark import send_bark_alert, send_bark_recovery
 from email_sender import send_email_alert, send_email_report, send_test_email
 from scanner import scan_all
 from fleet import init_fleet_db, ensure_local_hub_node
+from hub_node import refresh_local_hub_node
 from hub_api import hub_api
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
@@ -50,6 +53,10 @@ init_default_settings()
 # 多节点控制面基础表和版本化 API
 init_fleet_db()
 ensure_local_hub_node()
+try:
+    refresh_local_hub_node()
+except Exception as exc:
+    app.logger.warning("initial Hub runtime observation failed: %s", exc)
 app.register_blueprint(hub_api)
 
 # 配置目录
@@ -169,11 +176,75 @@ def collect_stats():
     return stats
 
 
+_health_check_thread_lock = threading.Lock()
+
+
+def collect_health_checks():
+    """Run the configured Hub-local checks and persist their latest result."""
+    if not _health_check_thread_lock.acquire(blocking=False):
+        return {"success": False, "busy": True, "error": "health check is already running"}
+    lock_file = None
+    try:
+        lock_file = open(f"{DB_PATH}.health.lock", "a", encoding="utf-8")
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return {"success": False, "busy": True, "error": "health check is already running"}
+
+        items = get_check_items()
+        enabled_items = [item for item in items if item["enabled"]]
+        results = run_all_checks(enabled_items)
+        failures = []
+        for result in results:
+            if not result["ok"]:
+                failures.append({"name": result["name"], "detail": result["detail"]})
+        replace_check_results(results)
+
+        settings = get_all_settings()
+        if settings.get("bark_enabled") == "1" and failures:
+            send_bark_alert(
+                failures,
+                server=settings.get("bark_server", "https://api.day.app"),
+                key=settings.get("bark_key", ""),
+                group=settings.get("bark_group", "Dev"),
+            )
+        return {
+            "success": True,
+            "total": len(results),
+            "passed": sum(1 for result in results if result["ok"]),
+            "failed": len(failures),
+            "failures": failures,
+        }
+    finally:
+        if lock_file is not None:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
+        _health_check_thread_lock.release()
+
+
 # 启动定时任务调度器
 scheduler = BackgroundScheduler()
 interval = int(get_setting("resource_collect_interval", "300"))
 scheduler.add_job(id='collect_resource_metrics', func=collect_stats, trigger='interval', seconds=interval, replace_existing=True)
+if os.environ.get("EYES_ENABLE_SCHEDULED_CHECKS") == "1":
+    check_interval = int(get_setting("check_interval", "600"))
+    if check_interval < 10:
+        raise RuntimeError("check_interval must be at least 10 seconds")
+    scheduler.add_job(
+        id='collect_health_checks',
+        func=collect_health_checks,
+        trigger='interval',
+        seconds=check_interval,
+        replace_existing=True,
+    )
 scheduler.add_job(id='clear_old_metrics', func=clear_old_metrics, trigger='interval', hours=24)
+scheduler.add_job(
+    id='refresh_local_hub_node',
+    func=refresh_local_hub_node,
+    trigger='interval',
+    seconds=30,
+    replace_existing=True,
+)
 scheduler.start()
 
 
@@ -236,7 +307,7 @@ def index():
 @login_required
 def fleet_view():
     """多节点 Fleet 页面。"""
-    return render_template("fleet.html")
+    return render_template("fleet.html", active_page="fleet")
 
 
 @app.route("/api/settings", methods=["GET"])
@@ -309,43 +380,8 @@ def remove_item(item_id):
 @login_required
 def run_checks():
     """运行检查"""
-    items = get_check_items()
-    enabled_items = [i for i in items if i["enabled"]]
-    
-    # 运行检查
-    results = run_all_checks(enabled_items)
-    
-    # 保存结果
-    clear_check_results()
-    failures = []
-    for r in results:
-        save_check_result(r["id"], r["type"], r["name"], r["ok"], r["detail"])
-        if not r["ok"]:
-            failures.append({"name": r["name"], "detail": r["detail"]})
-    
-    # 发送通知
-    settings = get_all_settings()
-    
-    # Bark 推送
-    if settings.get("bark_enabled") == "1" and failures:
-        send_bark_alert(
-            failures,
-            server=settings.get("bark_server", "https://api.day.app"),
-            key=settings.get("bark_key", ""),
-            group=settings.get("bark_group", "Dev")
-        )
-    
-    # 邮件推送（后续实现）
-    # if settings.get("email_enabled") == "1" and failures:
-    #     send_email_alert(...)
-    
-    return jsonify({
-        "success": True,
-        "total": len(results),
-        "passed": sum(1 for r in results if r["ok"]),
-        "failed": len(failures),
-        "failures": failures
-    })
+    result = collect_health_checks()
+    return jsonify(result), 409 if result.get("busy") else 200
 
 
 @app.route("/api/results", methods=["GET"])

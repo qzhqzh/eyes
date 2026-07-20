@@ -4,236 +4,93 @@
 
 {% block extra_css %}
 <style>
-    .fleet-shell {
-        width: min(1440px, 100%);
-        margin: 0 auto;
-        padding: var(--eyes-spacing-lg);
-    }
-
-    .fleet-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--eyes-spacing);
-        margin-bottom: var(--eyes-spacing-lg);
-    }
-
-    .fleet-title {
-        color: var(--eyes-text-primary);
-        font-size: var(--eyes-font-size-2xl);
-        font-weight: var(--eyes-font-weight-semibold);
-    }
-
-    .fleet-subtitle,
-    .fleet-muted {
-        color: var(--eyes-text-muted);
-        font-size: var(--eyes-font-size-sm);
-    }
-
-    .fleet-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
-        gap: var(--eyes-spacing);
-        align-items: start;
-    }
-
-    .fleet-table-wrap {
-        overflow-x: auto;
-    }
-
-    .fleet-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: var(--eyes-font-size-base);
-    }
-
-    .fleet-table th {
-        padding: var(--eyes-spacing-sm) var(--eyes-spacing);
-        color: var(--eyes-text-muted);
-        font-size: var(--eyes-font-size-xs);
-        font-weight: var(--eyes-font-weight-medium);
-        text-align: left;
-        border-bottom: 1px solid var(--eyes-border);
-        white-space: nowrap;
-    }
-
-    .fleet-table td {
-        padding: var(--eyes-spacing-sm) var(--eyes-spacing);
-        color: var(--eyes-text-secondary);
-        border-bottom: 1px solid var(--eyes-border);
-        vertical-align: middle;
-    }
-
-    .fleet-table tbody tr:last-child td {
-        border-bottom: 0;
-    }
-
-    .fleet-table tbody tr {
-        cursor: pointer;
-        transition: background-color var(--eyes-transition-fast);
-    }
-
-    .fleet-table tbody tr:hover {
-        background: var(--eyes-bg-card-hover);
-    }
-
-    .fleet-row-button {
-        width: 100%;
-        min-height: 44px;
-        padding: 0;
-        border: 0;
-        background: transparent;
-        color: var(--eyes-text-primary);
-        font: inherit;
-        font-weight: var(--eyes-font-weight-medium);
-        text-align: left;
-        cursor: pointer;
-    }
-
-    .fleet-row-button:hover,
-    .fleet-row-button:focus-visible {
-        color: var(--eyes-primary);
-        outline: none;
-    }
-
-    .fleet-role-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--eyes-spacing-2xs);
-    }
-
-    .fleet-state {
-        min-height: 180px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: var(--eyes-spacing-sm);
-        padding: var(--eyes-spacing-lg);
-        color: var(--eyes-text-muted);
-        text-align: center;
-    }
-
-    .fleet-detail-meta {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: var(--eyes-spacing-sm);
-        margin-bottom: var(--eyes-spacing);
-    }
-
-    .fleet-meta-item {
-        padding: var(--eyes-spacing-sm);
-        background: var(--eyes-bg-input);
-        border-radius: var(--eyes-radius-sm);
-    }
-
-    .fleet-meta-label {
-        display: block;
-        margin-bottom: var(--eyes-spacing-2xs);
-        color: var(--eyes-text-muted);
-        font-size: var(--eyes-font-size-xs);
-    }
-
-    .fleet-meta-value {
-        color: var(--eyes-text-primary);
-        font-size: var(--eyes-font-size-base);
-        overflow-wrap: anywhere;
-    }
-
-    .fleet-json-title {
-        margin: var(--eyes-spacing) 0 var(--eyes-spacing-xs);
-        color: var(--eyes-text-primary);
-        font-size: var(--eyes-font-size-sm);
-        font-weight: var(--eyes-font-weight-medium);
-    }
-
-    .fleet-json {
-        max-height: 300px;
-        margin: 0;
-        padding: var(--eyes-spacing-sm);
-        overflow: auto;
-        background: var(--eyes-bg-page);
-        border: 1px solid var(--eyes-border);
-        border-radius: var(--eyes-radius-sm);
-        color: var(--eyes-text-secondary);
-        font-size: var(--eyes-font-size-xs);
-        line-height: 1.6;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-    }
-
-    @media (max-width: 900px) {
-        .fleet-shell {
-            padding: var(--eyes-spacing);
-        }
-
-        .fleet-grid {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    @media (max-width: 560px) {
-        .fleet-header {
-            align-items: flex-start;
-            flex-direction: column;
-        }
-
-        .fleet-detail-meta {
-            grid-template-columns: 1fr;
-        }
-    }
+    .fleet-page { width: min(1500px, 100%); margin: 0 auto; }
+    .fleet-header { display: flex; align-items: center; justify-content: space-between; gap: var(--eyes-spacing); margin-bottom: var(--eyes-spacing-lg); }
+    .fleet-title { color: var(--eyes-text-primary); font-size: var(--eyes-font-size-2xl); font-weight: var(--eyes-font-weight-semibold); }
+    .fleet-subtitle, .fleet-muted { color: var(--eyes-text-muted); font-size: var(--eyes-font-size-sm); }
+    .fleet-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--eyes-spacing); margin-bottom: var(--eyes-spacing); }
+    .fleet-summary-item { padding: var(--eyes-spacing); }
+    .fleet-summary-label { color: var(--eyes-text-muted); font-size: var(--eyes-font-size-xs); }
+    .fleet-summary-value { margin-top: var(--eyes-spacing-2xs); color: var(--eyes-text-primary); font-size: var(--eyes-font-size-xl); font-weight: var(--eyes-font-weight-semibold); }
+    .fleet-summary-detail { margin-top: 2px; color: var(--eyes-text-muted); font-size: var(--eyes-font-size-xs); }
+    .fleet-grid { display: grid; grid-template-columns: minmax(520px, 1.15fr) minmax(360px, .85fr); gap: var(--eyes-spacing); align-items: start; }
+    .fleet-table-wrap { overflow-x: auto; }
+    .fleet-table { width: 100%; border-collapse: collapse; font-size: var(--eyes-font-size-base); }
+    .fleet-table th { padding: var(--eyes-spacing-sm) var(--eyes-spacing); color: var(--eyes-text-muted); font-size: var(--eyes-font-size-xs); font-weight: var(--eyes-font-weight-medium); text-align: left; border-bottom: 1px solid var(--eyes-border); white-space: nowrap; }
+    .fleet-table td { padding: var(--eyes-spacing-sm) var(--eyes-spacing); color: var(--eyes-text-secondary); border-bottom: 1px solid var(--eyes-border); vertical-align: middle; }
+    .fleet-table tbody tr:last-child td { border-bottom: 0; }
+    .fleet-table tbody tr.is-selected { background: var(--eyes-primary-light); }
+    .fleet-row-button { width: 100%; min-height: 40px; padding: 0; border: 0; background: transparent; color: var(--eyes-text-primary); font: inherit; font-weight: var(--eyes-font-weight-medium); text-align: left; cursor: pointer; }
+    .fleet-row-button:hover, .fleet-row-button:focus-visible { color: var(--eyes-primary); outline: none; }
+    .fleet-role-list, .fleet-chip-list { display: flex; flex-wrap: wrap; gap: var(--eyes-spacing-2xs); }
+    .fleet-state { min-height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--eyes-spacing-sm); padding: var(--eyes-spacing-lg); color: var(--eyes-text-muted); text-align: center; }
+    .fleet-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--eyes-spacing); margin-bottom: var(--eyes-spacing); }
+    .fleet-detail-name { color: var(--eyes-text-primary); font-size: var(--eyes-font-size-lg); font-weight: var(--eyes-font-weight-semibold); overflow-wrap: anywhere; }
+    .fleet-section { padding-top: var(--eyes-spacing); margin-top: var(--eyes-spacing); border-top: 1px solid var(--eyes-border); }
+    .fleet-section-title { margin-bottom: var(--eyes-spacing-sm); color: var(--eyes-text-primary); font-size: var(--eyes-font-size-sm); font-weight: var(--eyes-font-weight-medium); }
+    .fleet-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--eyes-spacing-sm) var(--eyes-spacing); }
+    .fleet-fact dt { color: var(--eyes-text-muted); font-size: var(--eyes-font-size-xs); }
+    .fleet-fact dd { margin: 2px 0 0; color: var(--eyes-text-secondary); font-size: var(--eyes-font-size-base); overflow-wrap: anywhere; }
+    .fleet-resource-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--eyes-spacing-sm); }
+    .fleet-resource { padding: var(--eyes-spacing-sm); background: var(--eyes-bg-input); border-radius: var(--eyes-radius-sm); }
+    .fleet-resource-label { color: var(--eyes-text-muted); font-size: var(--eyes-font-size-xs); }
+    .fleet-resource-value { margin-top: 2px; color: var(--eyes-text-primary); font-size: var(--eyes-font-size-md); font-weight: var(--eyes-font-weight-semibold); }
+    .fleet-resource-detail { color: var(--eyes-text-muted); font-size: var(--eyes-font-size-xs); }
+    .fleet-progress { height: 4px; margin-top: var(--eyes-spacing-xs); overflow: hidden; background: var(--eyes-border); border-radius: var(--eyes-radius-full); }
+    .fleet-progress-fill { height: 100%; background: var(--eyes-primary); border-radius: inherit; }
+    .fleet-capability { display: flex; align-items: center; justify-content: space-between; gap: var(--eyes-spacing); padding: var(--eyes-spacing-xs) 0; border-bottom: 1px solid var(--eyes-border); }
+    .fleet-capability:last-child { border-bottom: 0; }
+    .fleet-capability-name { color: var(--eyes-text-secondary); font-size: var(--eyes-font-size-base); overflow-wrap: anywhere; }
+    .fleet-note { padding: var(--eyes-spacing-sm); margin-bottom: var(--eyes-spacing); color: var(--eyes-text-muted); font-size: var(--eyes-font-size-xs); background: var(--eyes-primary-light); border-radius: var(--eyes-radius-sm); }
+    .fleet-raw summary { color: var(--eyes-text-secondary); font-size: var(--eyes-font-size-sm); cursor: pointer; }
+    .fleet-json { max-height: 320px; margin: var(--eyes-spacing-sm) 0 0; padding: var(--eyes-spacing-sm); overflow: auto; background: var(--eyes-bg-page); border: 1px solid var(--eyes-border); border-radius: var(--eyes-radius-sm); color: var(--eyes-text-secondary); font-size: var(--eyes-font-size-xs); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+    @media (max-width: 1100px) { .fleet-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fleet-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) { .fleet-header { align-items: flex-start; flex-direction: column; } .fleet-summary, .fleet-facts, .fleet-resource-grid { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
 
 {% block content %}
-<main class="fleet-shell">
-    <header class="fleet-header">
-        <div>
-            <h1 class="fleet-title">Fleet</h1>
-            <p class="fleet-subtitle">查看已连接节点及其最近一次资源快照</p>
-        </div>
-        <div class="flex gap-2">
-            <a class="e-btn e-btn-secondary" href="/">返回监控</a>
-            <button class="e-btn e-btn-primary" id="refresh-fleet" type="button">刷新</button>
-        </div>
-    </header>
-
-    <div class="fleet-grid">
-        <section class="e-card" aria-labelledby="fleet-list-title">
-            <div class="e-card-header">
+<div class="eyes-app-shell">
+    {% include "_sidebar.html" %}
+    <main class="eyes-app-main">
+        <div class="fleet-page">
+            <header class="fleet-header">
                 <div>
-                    <div class="e-card-title" id="fleet-list-title">节点</div>
-                    <div class="fleet-muted" id="fleet-count">正在加载</div>
+                    <h1 class="fleet-title">Fleet 节点</h1>
+                    <p class="fleet-subtitle">汇总当前在线节点的联通状态、资源容量和可用能力</p>
                 </div>
-            </div>
-            <div id="fleet-list-state" aria-live="polite"></div>
-            <div class="fleet-table-wrap" id="fleet-table-wrap" hidden>
-                <table class="fleet-table">
-                    <thead>
-                        <tr>
-                            <th scope="col">名称</th>
-                            <th scope="col">状态</th>
-                            <th scope="col">角色</th>
-                            <th scope="col">主机名</th>
-                            <th scope="col">最后在线</th>
-                            <th scope="col">快照</th>
-                        </tr>
-                    </thead>
-                    <tbody id="fleet-table-body"></tbody>
-                </table>
-            </div>
-        </section>
+                <button class="e-btn e-btn-primary" id="refresh-fleet" type="button">刷新</button>
+            </header>
 
-        <aside class="e-card" aria-labelledby="fleet-detail-title">
-            <div class="e-card-header">
-                <div class="e-card-title" id="fleet-detail-title">节点详情</div>
+            <section class="fleet-summary" id="fleet-summary" aria-label="全网资源概览" aria-live="polite"></section>
+
+            <div class="fleet-grid">
+                <section class="e-card" aria-labelledby="fleet-list-title">
+                    <div class="e-card-header">
+                        <div>
+                            <div class="e-card-title" id="fleet-list-title">联通节点</div>
+                            <div class="fleet-muted" id="fleet-count">正在加载</div>
+                        </div>
+                    </div>
+                    <div id="fleet-list-state" aria-live="polite"></div>
+                    <div class="fleet-table-wrap" id="fleet-table-wrap" hidden>
+                        <table class="fleet-table">
+                            <thead><tr><th scope="col">名称</th><th scope="col">联通</th><th scope="col">角色</th><th scope="col">主机名</th><th scope="col">最后心跳</th><th scope="col">快照</th></tr></thead>
+                            <tbody id="fleet-table-body"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <aside class="e-card" aria-labelledby="fleet-detail-title">
+                    <div class="e-card-header"><div class="e-card-title" id="fleet-detail-title">节点详情</div></div>
+                    <div class="e-card-body" id="fleet-detail" aria-live="polite">
+                        <div class="fleet-state">选择一个节点查看结构化资源与能力信息</div>
+                    </div>
+                </aside>
             </div>
-            <div class="e-card-body" id="fleet-detail" aria-live="polite">
-                <div class="fleet-state">选择一个节点查看 Inventory 和 Resources 摘要</div>
-            </div>
-        </aside>
-    </div>
-</main>
+        </div>
+    </main>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -244,7 +101,9 @@
     const tableBody = document.getElementById('fleet-table-body');
     const count = document.getElementById('fleet-count');
     const detail = document.getElementById('fleet-detail');
+    const summary = document.getElementById('fleet-summary');
     const refreshButton = document.getElementById('refresh-fleet');
+    let selectedNodeId = null;
 
     function element(tag, className, text) {
         const node = document.createElement(tag);
@@ -266,22 +125,45 @@
     }
 
     function formatTime(value) {
-        if (!value) return '—';
+        if (!value) return '尚未上报';
         const parsed = new Date(value);
         return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString();
     }
 
-    function statusClass(value) {
-        if (value === 'ready' || value === 'local') return 'e-badge e-badge-success';
-        if (value === 'stale' || value === 'enrolled') return 'e-badge e-badge-warning';
-        return 'e-badge e-badge-danger';
+    function formatBytes(value) {
+        const bytes = Number(value);
+        if (!Number.isFinite(bytes) || bytes <= 0) return '未上报';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+        return `${(bytes / (1024 ** index)).toLocaleString(undefined, { maximumFractionDigits: 1 })} ${units[index]}`;
+    }
+
+    function formatCores(value) {
+        const millis = Number(value);
+        return Number.isFinite(millis) && millis > 0 ? `${(millis / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} 核` : '未上报';
+    }
+
+    function ratio(available, capacity) {
+        const total = Number(capacity);
+        const free = Number(available);
+        if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(free)) return null;
+        return Math.max(0, Math.min(100, (free / total) * 100));
+    }
+
+    const statusMeta = {
+        online: { label: '在线', className: 'e-badge e-badge-success' },
+        stale: { label: '延迟', className: 'e-badge e-badge-warning' },
+        offline: { label: '离线', className: 'e-badge e-badge-danger' },
+        unknown: { label: '未上报', className: 'e-badge e-badge-warning' },
+    };
+
+    function statusBadge(value) {
+        const meta = statusMeta[value] || statusMeta.unknown;
+        return element('span', meta.className, meta.label);
     }
 
     async function fetchJson(url) {
-        const response = await fetch(url, {
-            credentials: 'same-origin',
-            headers: { Accept: 'application/json' },
-        });
+        const response = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
         if (!response.ok) throw new Error(`请求失败（HTTP ${response.status}）`);
         return response.json();
     }
@@ -293,114 +175,232 @@
         row.appendChild(cell);
     }
 
+    function summaryItem(label, value, detailText) {
+        const item = element('div', 'e-card fleet-summary-item');
+        item.appendChild(element('div', 'fleet-summary-label', label));
+        item.appendChild(element('div', 'fleet-summary-value', value));
+        item.appendChild(element('div', 'fleet-summary-detail', detailText));
+        return item;
+    }
+
+    function renderSummary(data) {
+        const connections = data.connection_counts || {};
+        const resources = data.resources || {};
+        summary.replaceChildren(
+            summaryItem('节点联通', `${connections.online || 0} / ${data.node_count || 0}`, `延迟 ${connections.stale || 0} · 离线 ${connections.offline || 0}`),
+            summaryItem('CPU 容量', formatCores(resources.cpu_capacity_millis), `${data.resource_node_count || 0} 个有效资源节点 · ${data.stale_resource_node_count || 0} 个快照过期`),
+            summaryItem('内存可用', formatBytes(resources.memory_available_bytes), `总计 ${formatBytes(resources.memory_capacity_bytes)}`),
+            summaryItem('根盘可用', formatBytes(resources.filesystem_available_bytes), `总计 ${formatBytes(resources.filesystem_capacity_bytes)}`)
+        );
+    }
+
     function renderNodes(nodes) {
         tableBody.replaceChildren();
-        count.textContent = `${nodes.length} 个节点`;
+        count.textContent = `${nodes.length} 个已注册节点`;
         if (!nodes.length) {
             tableWrap.hidden = true;
-            listState.replaceChildren(state('尚无已注册节点。启动一个 eyes-agent 后在这里刷新。'));
+            listState.replaceChildren(state('尚无节点。启动 eyes-agent 并完成注册后，节点会出现在这里。'));
             return;
         }
-
         nodes.forEach((node) => {
             const row = document.createElement('tr');
-            row.addEventListener('click', () => loadNodeDetail(node.id));
-            const nameButton = element(
-                'button',
-                'fleet-row-button',
-                node.display_name || node.id || '未命名节点'
-            );
-            nameButton.type = 'button';
-            appendCell(row, nameButton);
-
-            const badge = element('span', statusClass(node.status), node.status || 'unknown');
-            appendCell(row, badge);
-
+            row.dataset.nodeId = node.id;
+            row.classList.toggle('is-selected', node.id === selectedNodeId);
+            const button = element('button', 'fleet-row-button', node.display_name || node.id || '未命名节点');
+            button.type = 'button';
+            button.setAttribute('aria-selected', node.id === selectedNodeId ? 'true' : 'false');
+            button.addEventListener('click', () => loadNodeDetail(node.id));
+            appendCell(row, button);
+            appendCell(row, statusBadge(node.connection_status));
             const roles = element('div', 'fleet-role-list');
             const roleValues = Array.isArray(node.roles) ? node.roles : [];
-            if (roleValues.length) {
-                roleValues.forEach((role) => roles.appendChild(element('span', 'e-badge e-badge-primary', String(role))));
-            } else {
-                roles.appendChild(element('span', 'fleet-muted', '—'));
-            }
+            if (roleValues.length) roleValues.forEach((role) => roles.appendChild(element('span', 'e-badge e-badge-primary', String(role))));
+            else roles.appendChild(element('span', 'fleet-muted', '—'));
             appendCell(row, roles);
             appendCell(row, node.hostname || '—');
             appendCell(row, formatTime(node.last_seen_at));
             appendCell(row, String(node.snapshot_count ?? 0));
             tableBody.appendChild(row);
         });
-
         listState.replaceChildren();
         tableWrap.hidden = false;
     }
 
-    function metaItem(label, value) {
-        const item = element('div', 'fleet-meta-item');
-        item.appendChild(element('span', 'fleet-meta-label', label));
-        item.appendChild(element('div', 'fleet-meta-value', value || '—'));
-        return item;
+    function factList(items) {
+        const list = element('dl', 'fleet-facts');
+        items.forEach(([label, value]) => {
+            const item = element('div', 'fleet-fact');
+            item.appendChild(element('dt', '', label));
+            item.appendChild(element('dd', '', value || '—'));
+            list.appendChild(item);
+        });
+        return list;
     }
 
-    function snapshotSummary(snapshot) {
-        if (!snapshot) return { available: false };
-        return {
-            generation: snapshot.generation,
-            observed_at: snapshot.observed_at,
-            received_at: snapshot.received_at,
-            payload: snapshot.payload,
-        };
+    function section(title) {
+        const wrapper = element('section', 'fleet-section');
+        wrapper.appendChild(element('h3', 'fleet-section-title', title));
+        return wrapper;
+    }
+
+    function resourceCard(label, primary, detailText, available, capacity) {
+        const card = element('div', 'fleet-resource');
+        card.appendChild(element('div', 'fleet-resource-label', label));
+        card.appendChild(element('div', 'fleet-resource-value', primary));
+        card.appendChild(element('div', 'fleet-resource-detail', detailText));
+        const percentage = ratio(available, capacity);
+        if (percentage !== null) {
+            const progress = element('div', 'fleet-progress');
+            progress.setAttribute('role', 'progressbar');
+            progress.setAttribute('aria-label', `${label}可用比例`);
+            progress.setAttribute('aria-valuenow', String(Math.round(percentage)));
+            progress.setAttribute('aria-valuemin', '0');
+            progress.setAttribute('aria-valuemax', '100');
+            const fill = element('div', 'fleet-progress-fill');
+            fill.style.width = `${percentage}%`;
+            progress.appendChild(fill);
+            card.appendChild(progress);
+        }
+        return card;
     }
 
     function renderNodeDetail(node) {
         const body = document.createDocumentFragment();
-        const meta = element('div', 'fleet-detail-meta');
-        meta.appendChild(metaItem('名称', node.display_name || node.id));
-        meta.appendChild(metaItem('状态', node.status));
-        meta.appendChild(metaItem('Node ID', node.id));
-        meta.appendChild(metaItem('最后在线', formatTime(node.last_seen_at)));
-        body.appendChild(meta);
+        const connection = node.connection_status || 'unknown';
+        const header = element('div', 'fleet-detail-header');
+        const heading = element('div');
+        heading.appendChild(element('div', 'fleet-detail-name', node.display_name || node.id));
+        heading.appendChild(element('div', 'fleet-muted', `最后心跳：${formatTime(node.last_seen_at)}`));
+        header.appendChild(heading);
+        header.appendChild(statusBadge(connection));
+        body.appendChild(header);
+
+        if (node.labels && node.labels['eyes.io/source'] === 'hub-runtime') {
+            body.appendChild(element('div', 'fleet-note', '这是 Hub 控制面运行环境的本地观测；物理宿主机的精确可调度容量仍建议由同机 eyes-agent 上报。'));
+        }
+
+        const identity = section('身份与定位');
+        identity.appendChild(factList([
+            ['Node ID', node.id], ['主机名', node.hostname], ['生命周期', node.status],
+            ['Agent', node.agent_version || '未上报'], ['协议', node.protocol_version],
+            ['位置', (node.labels || {})['eyes.io/location'] || (node.labels || {})['eyes.io/site'] || '未声明'],
+        ]));
+        const roleChips = element('div', 'fleet-chip-list');
+        (node.roles || []).forEach((role) => roleChips.appendChild(element('span', 'e-badge e-badge-primary', String(role))));
+        Object.entries(node.labels || {}).forEach(([key, value]) => roleChips.appendChild(element('span', 'e-badge', `${key}=${value}`)));
+        if (roleChips.childNodes.length) identity.appendChild(roleChips);
+        body.appendChild(identity);
 
         const snapshots = node.snapshots || {};
-        body.appendChild(element('div', 'fleet-json-title', 'Inventory'));
-        const inventory = element('pre', 'fleet-json');
-        inventory.textContent = JSON.stringify(snapshotSummary(snapshots.inventory), null, 2);
-        body.appendChild(inventory);
+        const resourceSnapshot = snapshots.resources;
+        const resources = resourceSnapshot && resourceSnapshot.payload && typeof resourceSnapshot.payload === 'object' ? resourceSnapshot.payload : null;
+        const resourceSection = section('资源容量');
+        if (!resources) {
+            resourceSection.appendChild(element('div', 'fleet-muted', '节点尚未上报 Resources 快照。'));
+        } else {
+            const cpu = resources.cpu || {};
+            const memory = resources.memory || {};
+            const root = (resources.filesystem || {}).root || {};
+            const grid = element('div', 'fleet-resource-grid');
+            grid.appendChild(resourceCard('CPU', formatCores(cpu.capacity_millis), `1m load：${cpu.load_1m ?? '未上报'}`, null, null));
+            grid.appendChild(resourceCard('内存', formatBytes(memory.available_bytes), `可用 / ${formatBytes(memory.capacity_bytes)}`, memory.available_bytes, memory.capacity_bytes));
+            grid.appendChild(resourceCard('根文件系统', formatBytes(root.available_bytes), `可用 / ${formatBytes(root.capacity_bytes)}`, root.available_bytes, root.capacity_bytes));
+            resourceSection.appendChild(grid);
+            resourceSection.appendChild(element('div', 'fleet-summary-detail', `快照时间：${formatTime(resourceSnapshot.observed_at || resourceSnapshot.received_at)}`));
+        }
+        body.appendChild(resourceSection);
 
-        body.appendChild(element('div', 'fleet-json-title', 'Resources'));
-        const resources = element('pre', 'fleet-json');
-        resources.textContent = JSON.stringify(snapshotSummary(snapshots.resources), null, 2);
-        body.appendChild(resources);
+        const inventorySnapshot = snapshots.inventory;
+        const inventory = inventorySnapshot && inventorySnapshot.payload && typeof inventorySnapshot.payload === 'object' ? inventorySnapshot.payload : {};
+        const capabilities = Array.isArray(inventory.capabilities) ? inventory.capabilities : [];
+        const capabilitySection = section('可用能力');
+        if (!capabilities.length) capabilitySection.appendChild(element('div', 'fleet-muted', '节点尚未声明能力。'));
+        capabilities.forEach((capability) => {
+            const row = element('div', 'fleet-capability');
+            row.appendChild(element('div', 'fleet-capability-name', `${capability.name || '未命名能力'} · ${capability.version || '未知版本'}`));
+            row.appendChild(element('span', capability.health === 'ready' ? 'e-badge e-badge-success' : 'e-badge e-badge-warning', capability.health === 'ready' ? '可用' : (capability.health || '未知')));
+            capabilitySection.appendChild(row);
+        });
+        body.appendChild(capabilitySection);
+
+        const system = inventory.system || {};
+        const os = inventory.os || {};
+        const addresses = inventory.network && Array.isArray(inventory.network.addresses) ? inventory.network.addresses.join('、') : '未上报';
+        const systemSection = section('系统与网络');
+        systemSection.appendChild(factList([
+            ['操作系统', [os.system, os.release].filter(Boolean).join(' ') || '未上报'],
+            ['架构', os.machine || '未上报'], ['Python', os.python || '未上报'],
+            ['运行时间', system.uptime || (system.uptime_seconds != null ? `${Math.floor(system.uptime_seconds / 3600)} 小时` : '未上报')],
+            ['系统负载', system.load || '未上报'], ['地址', addresses],
+        ]));
+        body.appendChild(systemSection);
+
+        const services = Array.isArray(inventory.systemd) ? inventory.systemd : [];
+        const activeCount = services.filter((service) => service.active === 'active').length;
+        const failed = services.filter((service) => service.active === 'failed');
+        const serviceSection = section('服务摘要');
+        serviceSection.appendChild(factList([['已发现', String(services.length)], ['运行中', String(activeCount)], ['失败', String(failed.length)]]));
+        if (failed.length) {
+            const failedList = element('div', 'fleet-chip-list');
+            failed.forEach((service) => failedList.appendChild(element('span', 'e-badge e-badge-danger', service.name || '未命名服务')));
+            serviceSection.appendChild(failedList);
+        }
+        body.appendChild(serviceSection);
+
+        const rawSection = section('诊断数据');
+        const raw = element('details', 'fleet-raw');
+        raw.appendChild(element('summary', '', '查看原始 Inventory / Resources JSON'));
+        const pre = element('pre', 'fleet-json');
+        pre.textContent = JSON.stringify({ inventory: inventorySnapshot || null, resources: resourceSnapshot || null }, null, 2);
+        raw.appendChild(pre);
+        rawSection.appendChild(raw);
+        body.appendChild(rawSection);
         detail.replaceChildren(body);
     }
 
     async function loadNodeDetail(nodeId) {
+        selectedNodeId = nodeId;
+        tableBody.querySelectorAll('tr').forEach((row) => {
+            const selected = row.dataset.nodeId === nodeId;
+            row.classList.toggle('is-selected', selected);
+            const button = row.querySelector('button');
+            if (button) button.setAttribute('aria-selected', selected ? 'true' : 'false');
+        });
+        detail.setAttribute('aria-busy', 'true');
         detail.replaceChildren(state('正在加载节点详情…'));
         try {
             renderNodeDetail(await fetchJson(`/api/v1/nodes/${encodeURIComponent(nodeId)}`));
         } catch (error) {
             detail.replaceChildren(state(error.message || '节点详情加载失败', '重试', () => loadNodeDetail(nodeId)));
+        } finally {
+            detail.removeAttribute('aria-busy');
         }
     }
 
-    async function loadNodes() {
+    async function loadFleet() {
         refreshButton.disabled = true;
         tableWrap.hidden = true;
         count.textContent = '正在加载';
         listState.replaceChildren(state('正在加载 Fleet 节点…'));
+        summary.replaceChildren(summaryItem('全网资源概览', '加载中', '正在读取在线节点快照'));
         try {
-            const nodes = await fetchJson('/api/v1/nodes');
+            const [nodes, summaryData] = await Promise.all([fetchJson('/api/v1/nodes'), fetchJson('/api/v1/fleet/summary')]);
             if (!Array.isArray(nodes)) throw new Error('Hub 返回了无效的节点列表');
+            renderSummary(summaryData);
             renderNodes(nodes);
+            const target = nodes.find((node) => node.id === selectedNodeId) || nodes[0];
+            if (target) loadNodeDetail(target.id);
         } catch (error) {
             count.textContent = '加载失败';
-            listState.replaceChildren(state(error.message || 'Fleet 加载失败', '重试', loadNodes));
+            summary.replaceChildren();
+            listState.replaceChildren(state(error.message || 'Fleet 加载失败', '重试', loadFleet));
         } finally {
             refreshButton.disabled = false;
         }
     }
 
-    refreshButton.addEventListener('click', loadNodes);
-    loadNodes();
+    refreshButton.addEventListener('click', loadFleet);
+    loadFleet();
 })();
 </script>
 {% endblock %}

@@ -15,6 +15,7 @@ from fleet import (
     create_workload,
     enroll_node,
     get_commands,
+    get_fleet_summary,
     get_node,
     list_nodes,
     list_workloads,
@@ -179,6 +180,12 @@ def command_ack(command_id):
 @_admin_required
 def nodes():
     return jsonify(list_nodes())
+
+
+@hub_api.route("/fleet/summary", methods=["GET"])
+@_admin_required
+def fleet_summary():
+    return jsonify(get_fleet_summary())
 
 
 @hub_api.route("/nodes/<node_id>", methods=["GET"])
