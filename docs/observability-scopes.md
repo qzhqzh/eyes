@@ -18,7 +18,7 @@ Eyes 当前同时保留两类观测，界面和 API 不应混用它们的统计�
 - 页面：`/fleet`
 - API：`GET /api/v1/nodes`、`GET /api/v1/fleet/summary`
 - 数据：各 Node Agent 主动上报的 heartbeat、Inventory 和 Resources 最新快照
-- 作用域：全部已注册节点；资源容量只汇总当前 `online` 且有 Resources 快照的节点
+- 作用域：全部已注册节点；资源容量只汇总当前 `online`、有 Resources 快照且不是 `hub-runtime` 诊断快照的节点
 
 联通状态由 Hub 根据最后心跳动态计算，不修改节点生命周期字段：
 
@@ -29,8 +29,10 @@ Eyes 当前同时保留两类观测，界面和 API 不应混用它们的统计�
 
 阈值可通过 `EYES_NODE_ONLINE_SECONDS` 和 `EYES_NODE_OFFLINE_SECONDS` 调整。离线节点的资产和最后快照会保留，但不会计入当前在线资源容量。
 
+Resources 快照默认超过 900 秒即不计入汇总，并在摘要中列为过期；阈值可通过 `EYES_RESOURCE_SNAPSHOT_MAX_AGE_SECONDS` 调整。这样即使心跳仍在线，也不会把采集器卡住后的旧容量继续当成有效资源。
+
 ## Hub 节点的过渡实现
 
-Hub 启动时会让 `hub-local` 每 30 秒发布本地心跳和运行环境快照，因此控制面自身可以在 Fleet 中正确显示在线。该快照标记为 `eyes.io/source=hub-runtime`，表示容器或进程看到的运行环境。
+Hub 启动时会让 `hub-local` 每 30 秒发布本地心跳和运行环境快照，因此控制面自身可以在 Fleet 中正确显示在线。该快照标记为 `eyes.io/source=hub-runtime`，表示容器或进程看到的运行环境，只用于节点详情诊断，不计入全网可用容量。
 
 如果要把 Hub 物理宿主机容量用于调度，仍应在宿主机运行标准 `eyes-agent`。后续迁移需要为旧版本机检查和资源指标补 `node_id`，并处理 Hub runtime 与宿主机 Agent 的资源去重。

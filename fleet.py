@@ -21,6 +21,9 @@ SNAPSHOT_KINDS = {"inventory", "resources", "capabilities", "links"}
 TERMINAL_COMMAND_STATES = {"succeeded", "failed", "rejected"}
 NODE_ONLINE_AFTER_SECONDS = int(os.environ.get("EYES_NODE_ONLINE_SECONDS", "90"))
 NODE_OFFLINE_AFTER_SECONDS = int(os.environ.get("EYES_NODE_OFFLINE_SECONDS", "300"))
+RESOURCE_SNAPSHOT_MAX_AGE_SECONDS = int(
+    os.environ.get("EYES_RESOURCE_SNAPSHOT_MAX_AGE_SECONDS", "900")
+)
 
 
 class FleetError(Exception):
@@ -184,6 +187,14 @@ def ensure_local_hub_node():
     display_name = os.environ.get("EYES_HUB_DISPLAY_NAME", "Eyes Hub")
     conn = get_db()
     cursor = conn.cursor()
+    cursor.execute("BEGIN IMMEDIATE")
+    cursor.execute("SELECT labels_json FROM nodes WHERE id = ?", (node_id,))
+    existing = cursor.fetchone()
+    if existing:
+        source = _json_load(existing["labels_json"], {}).get("eyes.io/source")
+        if source not in {"legacy-local", "hub-runtime"}:
+            conn.close()
+            raise ConflictError("configured Hub node ID belongs to a non-Hub node")
     cursor.execute(
         """
         INSERT INTO nodes (
@@ -432,6 +443,7 @@ def get_fleet_summary():
         "node_count": len(nodes),
         "connection_counts": {"online": 0, "stale": 0, "offline": 0, "unknown": 0},
         "resource_node_count": 0,
+        "stale_resource_node_count": 0,
         "resources": {
             "cpu_capacity_millis": 0,
             "cpu_allocatable_millis": 0,
@@ -458,7 +470,7 @@ def get_fleet_summary():
     cursor = conn.cursor()
     placeholders = ",".join("?" for _ in online_ids)
     cursor.execute(
-        f"SELECT node_id, kind, payload_json FROM node_snapshots "
+        f"SELECT node_id, kind, payload_json, received_at FROM node_snapshots "
         f"WHERE node_id IN ({placeholders}) AND kind IN ('inventory', 'resources')",
         tuple(online_ids),
     )
@@ -471,6 +483,12 @@ def get_fleet_summary():
         if not isinstance(payload, dict):
             continue
         if row["kind"] == "resources":
+            labels = node_by_id[row["node_id"]].get("labels", {})
+            if labels.get("eyes.io/source") == "hub-runtime":
+                continue
+            if not _timestamp_is_fresh(row["received_at"], RESOURCE_SNAPSHOT_MAX_AGE_SECONDS):
+                summary["stale_resource_node_count"] += 1
+                continue
             resource_nodes.add(row["node_id"])
             cpu = payload.get("cpu") if isinstance(payload.get("cpu"), dict) else {}
             memory = payload.get("memory") if isinstance(payload.get("memory"), dict) else {}
@@ -702,6 +720,19 @@ def _non_negative_int(value):
         return max(0, int(value or 0))
     except (TypeError, ValueError):
         return 0
+
+
+def _timestamp_is_fresh(value, max_age_seconds):
+    if not value:
+        return False
+    try:
+        timestamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        age_seconds = (datetime.now(timezone.utc) - timestamp).total_seconds()
+        return 0 <= age_seconds <= max_age_seconds
+    except (TypeError, ValueError):
+        return False
 
 
 def _insert_audit(

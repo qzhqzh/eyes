@@ -4,7 +4,7 @@ import unittest
 from unittest import mock
 
 import models
-from fleet import get_node, init_fleet_db
+from fleet import get_fleet_summary, get_node, init_fleet_db
 from hub_node import refresh_local_hub_node
 
 
@@ -37,6 +37,7 @@ class HubNodeObserverTest(unittest.TestCase):
         self.assertIn("resources", node["snapshots"])
         capabilities = node["snapshots"]["inventory"]["payload"]["capabilities"]
         self.assertTrue(any(item["name"] == "eyes.io/control-plane.hub" for item in capabilities))
+        self.assertEqual(get_fleet_summary()["resource_node_count"], 0)
 
 
 if __name__ == "__main__":

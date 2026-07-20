@@ -122,6 +122,13 @@ class FleetStoreTest(unittest.TestCase):
         self.assertEqual(workloads[0]["id"], workload_id)
         self.assertEqual(workloads[0]["status"], "pending")
 
+    def test_hub_node_id_cannot_overwrite_an_enrolled_agent(self):
+        enroll_node({"node_id": "real-agent", "hostname": "worker"})
+        with mock.patch.dict(os.environ, {"EYES_HUB_NODE_ID": "real-agent"}):
+            with self.assertRaises(ConflictError):
+                ensure_local_hub_node()
+        self.assertEqual(get_node("real-agent")["hostname"], "worker")
+
     def test_connectivity_and_summary_only_include_online_resources(self):
         enroll_node({"node_id": "node-online", "hostname": "online-worker"})
         record_heartbeat("node-online", {"boot_id": "boot-online", "sequence": 1})
@@ -165,6 +172,29 @@ class FleetStoreTest(unittest.TestCase):
         self.assertEqual(offline_summary["resource_node_count"], 0)
         self.assertEqual(offline_summary["resources"]["cpu_capacity_millis"], 0)
 
+    def test_online_node_with_expired_snapshot_is_not_aggregated(self):
+        enroll_node({"node_id": "node-stale-snapshot", "hostname": "stale-worker"})
+        record_heartbeat("node-stale-snapshot", {"boot_id": "boot-stale", "sequence": 1})
+        put_snapshot(
+            "node-stale-snapshot",
+            "resources",
+            1,
+            {"cpu": {"capacity_millis": 8000}},
+        )
+        conn = models.get_db()
+        old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        conn.execute(
+            "UPDATE node_snapshots SET received_at = ? WHERE node_id = ? AND kind = 'resources'",
+            (old, "node-stale-snapshot"),
+        )
+        conn.commit()
+        conn.close()
+
+        summary = get_fleet_summary()
+        self.assertEqual(summary["connection_counts"]["online"], 1)
+        self.assertEqual(summary["resource_node_count"], 0)
+        self.assertEqual(summary["stale_resource_node_count"], 1)
+
     def test_commands_expire_and_terminal_ack_cannot_regress(self):
         enroll_node({"node_id": "node-command", "hostname": "command-worker"})
         now = datetime.now(timezone.utc)
@@ -200,6 +230,24 @@ class FleetStoreTest(unittest.TestCase):
         models.save_check_result(item_id, "http", "legacy-check", True, "ok")
         models.delete_check_item(item_id)
         self.assertEqual(models.get_check_results(), [])
+
+    def test_health_results_are_replaced_as_one_complete_batch(self):
+        first_id = models.add_check_item("http", "first", "http://first.invalid")
+        second_id = models.add_check_item("http", "second", "http://second.invalid")
+        models.replace_check_results(
+            [
+                {"id": first_id, "type": "http", "name": "first", "ok": True, "detail": "ok"},
+                {"id": second_id, "type": "http", "name": "second", "ok": False, "detail": "down"},
+            ]
+        )
+        self.assertEqual(len(models.get_check_results()), 2)
+
+        models.replace_check_results(
+            [{"id": first_id, "type": "http", "name": "first", "ok": True, "detail": "ok"}]
+        )
+        results = models.get_check_results()
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["item_id"], first_id)
 
 
 if __name__ == "__main__":

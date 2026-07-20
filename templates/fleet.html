@@ -188,7 +188,7 @@
         const resources = data.resources || {};
         summary.replaceChildren(
             summaryItem('节点联通', `${connections.online || 0} / ${data.node_count || 0}`, `延迟 ${connections.stale || 0} · 离线 ${connections.offline || 0}`),
-            summaryItem('CPU 容量', formatCores(resources.cpu_capacity_millis), `${data.resource_node_count || 0} 个在线资源节点`),
+            summaryItem('CPU 容量', formatCores(resources.cpu_capacity_millis), `${data.resource_node_count || 0} 个有效资源节点 · ${data.stale_resource_node_count || 0} 个快照过期`),
             summaryItem('内存可用', formatBytes(resources.memory_available_bytes), `总计 ${formatBytes(resources.memory_capacity_bytes)}`),
             summaryItem('根盘可用', formatBytes(resources.filesystem_available_bytes), `总计 ${formatBytes(resources.filesystem_capacity_bytes)}`)
         );

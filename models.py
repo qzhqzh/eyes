@@ -221,6 +221,37 @@ def save_check_result(item_id, item_type, item_name, ok, detail):
     conn.close()
 
 
+def replace_check_results(results):
+    """Atomically replace the complete latest health-check result set."""
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("BEGIN IMMEDIATE")
+        cursor.execute("DELETE FROM check_results")
+        cursor.executemany(
+            """
+            INSERT INTO check_results (item_id, item_type, item_name, ok, detail)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    result["id"],
+                    result["type"],
+                    result["name"],
+                    1 if result["ok"] else 0,
+                    result["detail"],
+                )
+                for result in results
+            ],
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def get_check_results():
     """获取所有检查结果"""
     conn = get_db()
