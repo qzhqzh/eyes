@@ -20,6 +20,7 @@ from bark import send_bark_alert, send_bark_recovery
 from email_sender import send_email_alert, send_email_report, send_test_email
 from scanner import scan_all
 from fleet import init_fleet_db, ensure_local_hub_node
+from hub_node import refresh_local_hub_node
 from hub_api import hub_api
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
@@ -50,6 +51,7 @@ init_default_settings()
 # 多节点控制面基础表和版本化 API
 init_fleet_db()
 ensure_local_hub_node()
+refresh_local_hub_node()
 app.register_blueprint(hub_api)
 
 # 配置目录
@@ -169,11 +171,62 @@ def collect_stats():
     return stats
 
 
+def collect_health_checks():
+    """Run the configured Hub-local checks and persist their latest result."""
+    items = get_check_items()
+    enabled_items = [item for item in items if item["enabled"]]
+    results = run_all_checks(enabled_items)
+    clear_check_results()
+    failures = []
+    for result in results:
+        save_check_result(
+            result["id"],
+            result["type"],
+            result["name"],
+            result["ok"],
+            result["detail"],
+        )
+        if not result["ok"]:
+            failures.append({"name": result["name"], "detail": result["detail"]})
+
+    settings = get_all_settings()
+    if settings.get("bark_enabled") == "1" and failures:
+        send_bark_alert(
+            failures,
+            server=settings.get("bark_server", "https://api.day.app"),
+            key=settings.get("bark_key", ""),
+            group=settings.get("bark_group", "Dev"),
+        )
+    return {
+        "success": True,
+        "total": len(results),
+        "passed": sum(1 for result in results if result["ok"]),
+        "failed": len(failures),
+        "failures": failures,
+    }
+
+
 # 启动定时任务调度器
 scheduler = BackgroundScheduler()
 interval = int(get_setting("resource_collect_interval", "300"))
+check_interval = int(get_setting("check_interval", "600"))
 scheduler.add_job(id='collect_resource_metrics', func=collect_stats, trigger='interval', seconds=interval, replace_existing=True)
+if os.environ.get("EYES_ENABLE_SCHEDULED_CHECKS") == "1":
+    scheduler.add_job(
+        id='collect_health_checks',
+        func=collect_health_checks,
+        trigger='interval',
+        seconds=check_interval,
+        replace_existing=True,
+    )
 scheduler.add_job(id='clear_old_metrics', func=clear_old_metrics, trigger='interval', hours=24)
+scheduler.add_job(
+    id='refresh_local_hub_node',
+    func=refresh_local_hub_node,
+    trigger='interval',
+    seconds=30,
+    replace_existing=True,
+)
 scheduler.start()
 
 
@@ -236,7 +289,7 @@ def index():
 @login_required
 def fleet_view():
     """多节点 Fleet 页面。"""
-    return render_template("fleet.html")
+    return render_template("fleet.html", active_page="fleet")
 
 
 @app.route("/api/settings", methods=["GET"])
@@ -309,43 +362,7 @@ def remove_item(item_id):
 @login_required
 def run_checks():
     """运行检查"""
-    items = get_check_items()
-    enabled_items = [i for i in items if i["enabled"]]
-    
-    # 运行检查
-    results = run_all_checks(enabled_items)
-    
-    # 保存结果
-    clear_check_results()
-    failures = []
-    for r in results:
-        save_check_result(r["id"], r["type"], r["name"], r["ok"], r["detail"])
-        if not r["ok"]:
-            failures.append({"name": r["name"], "detail": r["detail"]})
-    
-    # 发送通知
-    settings = get_all_settings()
-    
-    # Bark 推送
-    if settings.get("bark_enabled") == "1" and failures:
-        send_bark_alert(
-            failures,
-            server=settings.get("bark_server", "https://api.day.app"),
-            key=settings.get("bark_key", ""),
-            group=settings.get("bark_group", "Dev")
-        )
-    
-    # 邮件推送（后续实现）
-    # if settings.get("email_enabled") == "1" and failures:
-    #     send_email_alert(...)
-    
-    return jsonify({
-        "success": True,
-        "total": len(results),
-        "passed": sum(1 for r in results if r["ok"]),
-        "failed": len(failures),
-        "failures": failures
-    })
+    return jsonify(collect_health_checks())
 
 
 @app.route("/api/results", methods=["GET"])

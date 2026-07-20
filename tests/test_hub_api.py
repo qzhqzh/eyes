@@ -98,6 +98,9 @@ class HubApiTest(unittest.TestCase):
 
         nodes = self.client.get("/api/v1/nodes")
         self.assertEqual(nodes.status_code, 200)
+        summary = self.client.get("/api/v1/fleet/summary")
+        self.assertEqual(summary.status_code, 200)
+        self.assertEqual(summary.get_json()["scope"], "online_nodes")
 
         workload = self.client.post(
             "/api/v1/workloads",

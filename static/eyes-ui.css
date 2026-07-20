@@ -97,6 +97,120 @@ body {
     line-height: var(--eyes-line-height-normal);
 }
 
+/* ========== Application shell ========== */
+.eyes-app-shell {
+    min-height: 100vh;
+}
+
+.eyes-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 20;
+    display: flex;
+    width: 220px;
+    flex-direction: column;
+    padding: var(--eyes-spacing);
+    background: var(--eyes-bg-sidebar);
+    border-right: 1px solid var(--eyes-border);
+}
+
+.eyes-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--eyes-spacing-sm);
+    padding: 0 var(--eyes-spacing-sm);
+    margin-bottom: var(--eyes-spacing-lg);
+    color: var(--eyes-text-primary);
+    font-size: var(--eyes-font-size-lg);
+    font-weight: var(--eyes-font-weight-semibold);
+}
+
+.eyes-nav-list {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--eyes-spacing-2xs);
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.eyes-nav-link {
+    display: flex;
+    min-height: 40px;
+    align-items: center;
+    gap: var(--eyes-spacing-sm);
+    padding: var(--eyes-spacing-sm);
+    border-radius: var(--eyes-radius);
+    color: var(--eyes-text-muted);
+    font-size: var(--eyes-font-size-md);
+    text-decoration: none;
+    transition: color var(--eyes-transition-fast), background-color var(--eyes-transition-fast);
+}
+
+.eyes-nav-link:hover,
+.eyes-nav-link:focus-visible {
+    background: var(--eyes-bg-card-hover);
+    color: var(--eyes-text-secondary);
+    outline: none;
+}
+
+.eyes-nav-link:focus-visible {
+    box-shadow: 0 0 0 2px var(--eyes-primary);
+}
+
+.eyes-nav-link.active {
+    background: var(--eyes-bg-card-hover);
+    color: var(--eyes-text-primary);
+    font-weight: var(--eyes-font-weight-medium);
+}
+
+.eyes-nav-logout {
+    margin-top: var(--eyes-spacing);
+}
+
+.eyes-app-main {
+    min-width: 0;
+    margin-left: 220px;
+    padding: var(--eyes-spacing-lg);
+}
+
+@media (max-width: 760px) {
+    .eyes-sidebar {
+        position: sticky;
+        width: 100%;
+        height: auto;
+        flex-direction: row;
+        align-items: center;
+        overflow-x: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--eyes-border);
+    }
+
+    .eyes-brand {
+        flex: 0 0 auto;
+        margin: 0 var(--eyes-spacing) 0 0;
+    }
+
+    .eyes-nav-list {
+        flex-direction: row;
+    }
+
+    .eyes-nav-list li,
+    .eyes-nav-link {
+        flex: 0 0 auto;
+    }
+
+    .eyes-nav-logout {
+        margin: 0 0 0 auto;
+    }
+
+    .eyes-app-main {
+        margin-left: 0;
+        padding: var(--eyes-spacing);
+    }
+}
+
 /* ========== Card 卡片组件 ========== */
 .e-card {
     background-color: var(--eyes-bg-card);

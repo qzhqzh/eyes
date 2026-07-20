@@ -19,6 +19,8 @@ from models import get_db
 
 SNAPSHOT_KINDS = {"inventory", "resources", "capabilities", "links"}
 TERMINAL_COMMAND_STATES = {"succeeded", "failed", "rejected"}
+NODE_ONLINE_AFTER_SECONDS = int(os.environ.get("EYES_NODE_ONLINE_SECONDS", "90"))
+NODE_OFFLINE_AFTER_SECONDS = int(os.environ.get("EYES_NODE_OFFLINE_SECONDS", "300"))
 
 
 class FleetError(Exception):
@@ -175,10 +177,11 @@ def init_fleet_db():
 
 
 def ensure_local_hub_node():
-    """Create a compatibility node for the current single-host Hub."""
+    """Create the Hub runtime node before its local heartbeat is collected."""
     node_id = os.environ.get("EYES_HUB_NODE_ID", "hub-local")
     now = _utc_now()
     hostname = os.uname().nodename
+    display_name = os.environ.get("EYES_HUB_DISPLAY_NAME", "Eyes Hub")
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
@@ -187,15 +190,21 @@ def ensure_local_hub_node():
             id, display_name, hostname, roles_json, labels_json, status,
             agent_version, protocol_version, enrolled_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO NOTHING
+        ON CONFLICT(id) DO UPDATE SET
+            display_name = excluded.display_name,
+            hostname = excluded.hostname,
+            roles_json = excluded.roles_json,
+            labels_json = excluded.labels_json,
+            protocol_version = excluded.protocol_version,
+            updated_at = excluded.updated_at
         """,
         (
             node_id,
-            hostname,
+            display_name,
             hostname,
             _json_dump(["hub"]),
-            _json_dump({"eyes.io/role": "hub", "eyes.io/source": "legacy-local"}),
-            "local",
+            _json_dump({"eyes.io/role": "hub", "eyes.io/source": "hub-runtime"}),
+            "enrolled",
             None,
             "eyes.node.v1",
             now,
@@ -414,6 +423,81 @@ def list_nodes():
     return [_node_from_row(row) for row in rows]
 
 
+def get_fleet_summary():
+    """Aggregate the latest resource capacity of currently connected nodes."""
+    nodes = list_nodes()
+    node_by_id = {node["id"]: node for node in nodes}
+    summary = {
+        "scope": "online_nodes",
+        "node_count": len(nodes),
+        "connection_counts": {"online": 0, "stale": 0, "offline": 0, "unknown": 0},
+        "resource_node_count": 0,
+        "resources": {
+            "cpu_capacity_millis": 0,
+            "cpu_allocatable_millis": 0,
+            "memory_capacity_bytes": 0,
+            "memory_allocatable_bytes": 0,
+            "memory_available_bytes": 0,
+            "filesystem_capacity_bytes": 0,
+            "filesystem_available_bytes": 0,
+        },
+        "capabilities": {},
+        "generated_at": _utc_now(),
+    }
+    for node in nodes:
+        state = node["connection_status"]
+        summary["connection_counts"][state] += 1
+
+    online_ids = {
+        node_id for node_id, node in node_by_id.items() if node["connection_status"] == "online"
+    }
+    if not online_ids:
+        return summary
+
+    conn = get_db()
+    cursor = conn.cursor()
+    placeholders = ",".join("?" for _ in online_ids)
+    cursor.execute(
+        f"SELECT node_id, kind, payload_json FROM node_snapshots "
+        f"WHERE node_id IN ({placeholders}) AND kind IN ('inventory', 'resources')",
+        tuple(online_ids),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    resource_nodes = set()
+    for row in rows:
+        payload = _json_load(row["payload_json"], {})
+        if not isinstance(payload, dict):
+            continue
+        if row["kind"] == "resources":
+            resource_nodes.add(row["node_id"])
+            cpu = payload.get("cpu") if isinstance(payload.get("cpu"), dict) else {}
+            memory = payload.get("memory") if isinstance(payload.get("memory"), dict) else {}
+            filesystem = payload.get("filesystem") if isinstance(payload.get("filesystem"), dict) else {}
+            root = filesystem.get("root") if isinstance(filesystem.get("root"), dict) else {}
+            values = summary["resources"]
+            values["cpu_capacity_millis"] += _non_negative_int(cpu.get("capacity_millis"))
+            values["cpu_allocatable_millis"] += _non_negative_int(cpu.get("allocatable_millis"))
+            values["memory_capacity_bytes"] += _non_negative_int(memory.get("capacity_bytes"))
+            values["memory_allocatable_bytes"] += _non_negative_int(memory.get("allocatable_bytes"))
+            values["memory_available_bytes"] += _non_negative_int(memory.get("available_bytes"))
+            values["filesystem_capacity_bytes"] += _non_negative_int(root.get("capacity_bytes"))
+            values["filesystem_available_bytes"] += _non_negative_int(root.get("available_bytes"))
+        elif row["kind"] == "inventory":
+            capabilities = payload.get("capabilities")
+            if not isinstance(capabilities, list):
+                continue
+            for capability in capabilities:
+                if not isinstance(capability, dict) or capability.get("health") != "ready":
+                    continue
+                name = str(capability.get("name", "")).strip()
+                if name:
+                    summary["capabilities"][name] = summary["capabilities"].get(name, 0) + 1
+    summary["resource_node_count"] = len(resource_nodes)
+    return summary
+
+
 def get_node(node_id):
     conn = get_db()
     cursor = conn.cursor()
@@ -590,7 +674,34 @@ def _node_from_row(row):
     data = dict(row)
     data["roles"] = _json_load(data.pop("roles_json", None), [])
     data["labels"] = _json_load(data.pop("labels_json", None), {})
+    connection_status, age_seconds = _connection_status(data.get("last_seen_at"))
+    data["connection_status"] = connection_status
+    data["heartbeat_age_seconds"] = age_seconds
     return data
+
+
+def _connection_status(last_seen_at):
+    if not last_seen_at:
+        return "unknown", None
+    try:
+        last_seen = datetime.fromisoformat(str(last_seen_at).replace("Z", "+00:00"))
+        if last_seen.tzinfo is None:
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+        age_seconds = max(0, int((datetime.now(timezone.utc) - last_seen).total_seconds()))
+    except (TypeError, ValueError):
+        return "unknown", None
+    if age_seconds <= NODE_ONLINE_AFTER_SECONDS:
+        return "online", age_seconds
+    if age_seconds <= NODE_OFFLINE_AFTER_SECONDS:
+        return "stale", age_seconds
+    return "offline", age_seconds
+
+
+def _non_negative_int(value):
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _insert_audit(

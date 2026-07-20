@@ -17,6 +17,7 @@ Eyes 的长期定位是：**让接入网络的 AI Agent 能够发现、申请并
 - [安全设计](security.md)：节点身份、权限分离、工作负载隔离、审计和威胁边界。
 - [演进路线](roadmap.md)：从当前代码到可用资源网络的分阶段实施与验收标准。
 - [实现状态](implementation-status.md)：目标设计中哪些已经落地、哪些仍是协议骨架。
+- [观测作用域与统计口径](observability-scopes.md)：Hub 本机健康与 Fleet 全网联通/资源的边界。
 
 ## 决策状态
 
