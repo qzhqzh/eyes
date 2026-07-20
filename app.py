@@ -26,7 +26,7 @@ from scanner import scan_all
 from fleet import init_fleet_db, ensure_local_hub_node
 from hub_node import refresh_local_hub_node
 from hub_api import hub_api
-from network_status import collect_wireguard_status, mounted_filesystem_type
+from network_status import collect_wireguard_with_agent, mounted_filesystem_type
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
@@ -660,7 +660,8 @@ def last_check_time():
 @login_required
 def wg_status():
     """检测 WireGuard 接口状态和流量"""
-    return jsonify(collect_wireguard_status())
+    agent_url = os.environ.get("EYES_AGENT_URL") or get_setting("agent_url", "")
+    return jsonify(collect_wireguard_with_agent(agent_url))
 
 
 @app.route("/api/test-email", methods=["POST"])

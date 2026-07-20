@@ -2,7 +2,12 @@ import os
 import tempfile
 import unittest
 
-from network_status import collect_wireguard_status, mounted_filesystem_type
+from network_status import (
+    collect_wireguard_status,
+    merge_agent_wireguard_status,
+    mounted_filesystem_type,
+    probe_wireguard_reachability,
+)
 
 
 class NetworkStatusTest(unittest.TestCase):
@@ -33,3 +38,63 @@ class NetworkStatusTest(unittest.TestCase):
         self.assertEqual(status["wg0"]["tx_bytes"], 20)
         self.assertTrue(status["wg1"]["ok"])
         self.assertEqual(status["wg1"]["rx_bytes"], 30)
+
+    def test_peer_handshake_distinguishes_interface_from_node_health(self):
+        status = {
+            "wg0": {"ok": True, "rx_bytes": 10, "tx_bytes": 20, "ip": None},
+            "wg1": {"ok": True, "rx_bytes": 30, "tx_bytes": 40, "ip": None},
+        }
+        interfaces = [
+            {"name": "wg0", "peers": [{"allowed_ips": "10.0.0.2/32", "latest_handshake": 990}]},
+            {"name": "dev_wg", "peers": [{"allowed_ips": "10.0.1.1/32", "latest_handshake": 100}]},
+        ]
+
+        merged = merge_agent_wireguard_status(status, interfaces, now=1000, fresh_seconds=180)
+
+        self.assertTrue(merged["wg0"]["ok"])
+        self.assertTrue(merged["wg0"]["peer_online"])
+        self.assertFalse(merged["wg1"]["ok"])
+        self.assertTrue(merged["wg1"]["interface_up"])
+        self.assertFalse(merged["wg1"]["peer_online"])
+        self.assertEqual(merged["wg1"]["peers"][0]["handshake_age_seconds"], 900)
+
+    def test_configured_peer_does_not_inherit_another_peers_handshake(self):
+        status = {
+            "wg0": {"ok": False, "rx_bytes": 0, "tx_bytes": 0, "ip": None},
+            "wg1": {"ok": True, "rx_bytes": 0, "tx_bytes": 0, "ip": None},
+        }
+        interfaces = [{
+            "name": "dev_wg",
+            "peers": [{"allowed_ips": "10.0.1.9/32", "latest_handshake": 990}],
+        }]
+
+        merged = merge_agent_wireguard_status(
+            status, interfaces, now=1000, fresh_seconds=180,
+            probes={"wg1": "10.0.1.1"},
+        )
+
+        self.assertFalse(merged["wg0"]["ok"])
+        self.assertFalse(merged["wg0"]["interface_up"])
+        self.assertFalse(merged["wg1"]["ok"])
+        self.assertEqual(merged["wg1"]["peers"], [])
+
+    def test_reachability_fallback_marks_offline_peer_down(self):
+        status = {
+            "wg0": {"ok": True, "rx_bytes": 0, "tx_bytes": 0, "ip": None},
+            "wg1": {"ok": True, "rx_bytes": 0, "tx_bytes": 0, "ip": None},
+        }
+
+        class Response:
+            def __init__(self, returncode):
+                self.returncode = returncode
+
+        def runner(command, **_kwargs):
+            return Response(0 if command[-1] == "10.0.0.250" else 1)
+
+        probed = probe_wireguard_reachability(
+            status, {"wg0": "10.0.0.250", "wg1": "10.0.1.1"}, runner
+        )
+
+        self.assertTrue(probed["wg0"]["ok"])
+        self.assertFalse(probed["wg1"]["ok"])
+        self.assertEqual(probed["wg1"]["peers"][0]["status_source"], "reachability")

@@ -78,6 +78,44 @@ def get_service_status(service_name):
         return "unknown"
 
 
+def get_wireguard_status():
+    """读取 WireGuard 接口和 peer 运行状态，不返回任何密钥。"""
+    if not shutil.which("wg"):
+        return []
+    try:
+        result = subprocess.run(
+            ["wg", "show", "all", "dump"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return {"error": result.stderr.strip() or "wg query failed"}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+    interfaces = {}
+    for line in result.stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) == 5:
+            name = fields[0]
+            interfaces[name] = {
+                "name": name,
+                "listen_port": int(fields[3] or 0),
+                "peers": [],
+            }
+        elif len(fields) >= 9:
+            name = fields[0]
+            interface = interfaces.setdefault(
+                name, {"name": name, "listen_port": 0, "peers": []}
+            )
+            interface["peers"].append({
+                "allowed_ips": fields[4],
+                "latest_handshake": int(fields[5] or 0),
+                "rx_bytes": int(fields[6] or 0),
+                "tx_bytes": int(fields[7] or 0),
+            })
+    return list(interfaces.values())
+
+
 def get_crontab(user=None):
     """获取 crontab 任务"""
     tasks = []
@@ -397,6 +435,7 @@ class AgentHandler(BaseHTTPRequestHandler):
             "/api/crontab": self.handle_crontab,
             "/api/info": self.handle_info,
             "/api/scan": self.handle_scan,
+            "/api/wireguard": self.handle_wireguard,
         }
         
         handler = routes.get(self.path)
@@ -409,7 +448,10 @@ class AgentHandler(BaseHTTPRequestHandler):
         self.send_json({
             "service": "eyes-agent",
             "version": "1.0",
-            "endpoints": ["/api/systemd", "/api/crontab", "/api/info", "/api/scan"]
+            "endpoints": [
+                "/api/systemd", "/api/crontab", "/api/info", "/api/scan",
+                "/api/wireguard",
+            ]
         })
     
     def handle_systemd(self):
@@ -423,6 +465,12 @@ class AgentHandler(BaseHTTPRequestHandler):
     
     def handle_scan(self):
         self.send_json(full_scan())
+
+    def handle_wireguard(self):
+        if os.environ.get("EYES_EXPOSE_WIREGUARD", "").lower() not in {"1", "true", "yes"}:
+            self.send_error(404)
+            return
+        self.send_json(get_wireguard_status())
     
     def send_json(self, data):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -446,6 +494,7 @@ def run_legacy_server(args):
     print("  /api/crontab  - 定时任务")
     print("  /api/info     - 系统信息")
     print("  /api/scan     - 完整扫描")
+    print("  /api/wireguard - WireGuard peer 状态")
 
     try:
         server.serve_forever()
