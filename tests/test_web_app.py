@@ -14,6 +14,7 @@ class WebAppSmokeTest(unittest.TestCase):
                     "EYES_DB_PATH": os.path.join(temp_dir, "eyes-web-test.db"),
                     "EYES_SECRET_KEY": "web-smoke-secret-key",
                     "EYES_WEB_PASSWORD": "web-smoke-password",
+                    "EYES_ASSET_API_TOKEN": "asset-smoke-token-123456789",
                     "EYES_ENABLE_SCHEDULED_CHECKS": "0",
                 }
             )
@@ -32,10 +33,83 @@ assert b'eyes-sidebar' in page.data
 assert b'fleet-summary' in page.data
 assert b'href="/fleet"' in page.data
 assert b'href="/domains"' in page.data
+assert b'href="/assets"' in page.data
 assert 'Fleet 节点'.encode() in page.data
 assert client.get('/domains').status_code == 200
 assert client.get('/api/domains').status_code == 200
 assert client.get('/api/domains/outside.example.com/status').status_code == 404
+assert client.get('/assets').status_code == 200
+with mock.patch('app.fetch_model_assets', return_value=[{'id': 'test:model'}]) as models:
+    response = client.get('/api/assets/models?refresh=1')
+    assert response.status_code == 200
+    assert response.get_json()['models'][0]['id'] == 'test:model'
+    models.assert_called_once_with('http://127.0.0.1:9092', refresh=True)
+with mock.patch('app.fetch_context7_accounts', return_value=[{'label': 'primary'}]):
+    response = client.get('/api/assets/context7')
+    assert response.status_code == 200
+    assert response.get_json()['accounts'][0]['label'] == 'primary'
+    assert response.get_json()['mcp_enabled'] is True
+assert client.post('/mcp/context7', json={'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'}).status_code == 401
+mcp_headers = {'Authorization': 'Bearer asset-smoke-token-123456789'}
+response = client.post(
+    '/mcp/context7',
+    headers=mcp_headers,
+    json={'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2025-11-25'}},
+)
+assert response.status_code == 200
+assert response.get_json()['result']['serverInfo']['name'] == 'eyes-context7-pool'
+assert response.get_json()['result']['protocolVersion'] == '2025-03-26'
+response = client.post(
+    '/mcp/context7',
+    headers=mcp_headers | {'MCP-Protocol-Version': '2099-01-01'},
+    json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'},
+)
+assert response.status_code == 400
+response = client.post(
+    '/mcp/context7',
+    headers=mcp_headers,
+    json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'},
+)
+assert [item['name'] for item in response.get_json()['result']['tools']] == ['resolve-library-id', 'query-docs']
+response = client.post(
+    '/mcp/context7',
+    headers=mcp_headers | {'Origin': 'https://untrusted.example'},
+    json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'},
+)
+assert response.status_code == 403
+response = client.post(
+    '/mcp/context7',
+    headers=mcp_headers,
+    json={'jsonrpc': '2.0', 'method': 'notifications/initialized'},
+)
+assert response.status_code == 202
+with mock.patch(
+    'app.call_context7_pool',
+    return_value={'status_code': 200, 'body': {'results': []}, 'content_type': 'application/json'},
+):
+    response = client.post(
+        '/mcp/context7',
+        headers=mcp_headers,
+        json={
+            'jsonrpc': '2.0',
+            'id': 3,
+            'method': 'tools/call',
+            'params': {
+                'name': 'resolve-library-id',
+                'arguments': {'libraryName': 'flask', 'query': 'routing'},
+            },
+        },
+    )
+assert response.status_code == 200
+assert response.get_json()['result']['structuredContent'] == {'results': []}
+with mock.patch('app._asset_mcp_rate_allowed', return_value=False):
+    response = client.post(
+        '/mcp/context7',
+        headers=mcp_headers,
+        json={'jsonrpc': '2.0', 'id': 4, 'method': 'tools/list'},
+    )
+assert response.status_code == 429
+assert response.headers['Retry-After'] == '60'
 assert client.get('/api/v1/fleet/summary').status_code == 200
 intervals = client.get('/api/check-intervals').get_json()
 assert intervals['resources'] == 300

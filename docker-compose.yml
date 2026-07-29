@@ -4,6 +4,9 @@ services:
     container_name: eyes-web
     restart: unless-stopped
     network_mode: host
+    depends_on:
+      eyes-asset-probe:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
       - ./eyes.db:/app/data/eyes.db
@@ -16,6 +19,9 @@ services:
       EYES_SECRET_KEY: ${EYES_SECRET_KEY:?set EYES_SECRET_KEY in .env}
       EYES_WEB_PASSWORD: ${EYES_WEB_PASSWORD:?set EYES_WEB_PASSWORD in .env}
       EYES_HUB_ENROLL_TOKEN: ${EYES_HUB_ENROLL_TOKEN:-}
+      EYES_ASSET_API_TOKEN: ${EYES_ASSET_API_TOKEN:-}
+      EYES_ASSET_MCP_RATE_LIMIT_PER_MINUTE: ${EYES_ASSET_MCP_RATE_LIMIT_PER_MINUTE:-30}
+      EYES_ASSET_MCP_ALLOWED_ORIGINS: ${EYES_ASSET_MCP_ALLOWED_ORIGINS:-}
       EYES_ENABLE_SCHEDULED_CHECKS: ${EYES_ENABLE_SCHEDULED_CHECKS:-0}
       EYES_PORT: ${EYES_PORT:-8090}
       EYES_NAS_PATH: /mnt/nas
@@ -23,3 +29,27 @@ services:
       EYES_AGENT_URL: ${EYES_AGENT_URL:-http://127.0.0.1:9091}
       EYES_WIREGUARD_PROBES: ${EYES_WIREGUARD_PROBES:-}
       EYES_GATEWAY_CONFIG_DIR: /gateway/nginx/conf.d
+      EYES_ASSET_PROBE_URL: http://127.0.0.1:9092
+
+  eyes-asset-probe:
+    build: .
+    container_name: eyes-asset-probe
+    restart: unless-stopped
+    network_mode: host
+    command: ["python", "asset_probe.py", "--host", "127.0.0.1", "--port", "9092"]
+    env_file:
+      - ${EYES_TOTEMORA_ENV_FILE_HOST:-/dev/null}
+    volumes:
+      - ${EYES_AI_KEY_DIR_HOST:-../ai-key}:/assets/ai-key:ro
+      - ${EYES_TOTEMORA_CONFIG_DIR_HOST:-../../app/Totemora/configs/example}:/assets/totemora:ro
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      EYES_AI_KEY_DIR: /assets/ai-key
+      EYES_TOTEMORA_CONFIG_DIR: /assets/totemora
+      EYES_CONTEXT7_ACCOUNTS: ${EYES_CONTEXT7_ACCOUNTS:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9092/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
