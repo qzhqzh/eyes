@@ -161,6 +161,50 @@ class AssetManagementTest(unittest.TestCase):
             [("personal", "ctx7sk-one"), ("work", "ctx7sk-three")],
         )
 
+    def test_context7_accounts_load_from_secret_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            accounts_file = os.path.join(temp_dir, "context7-accounts")
+            with open(accounts_file, "w", encoding="utf-8") as handle:
+                handle.write("personal=ctx7sk-file-one\nwork=ctx7sk-file-two\n")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "EYES_CONTEXT7_ACCOUNTS": "",
+                    "EYES_CONTEXT7_ACCOUNTS_FILE": accounts_file,
+                },
+            ):
+                accounts = asset_management.load_context7_accounts()
+            self.assertEqual(
+                [item["label"] for item in accounts], ["personal", "work"]
+            )
+            self.assertTrue(
+                all(item["_api_key"].startswith("ctx7sk") for item in accounts)
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "EYES_CONTEXT7_ACCOUNTS": "direct=ctx7sk-direct-key",
+                    "EYES_CONTEXT7_ACCOUNTS_FILE": accounts_file,
+                },
+            ):
+                direct_accounts = asset_management.load_context7_accounts()
+            self.assertEqual(
+                [item["label"] for item in direct_accounts], ["direct"]
+            )
+
+            invalid_file = os.path.join(temp_dir, "invalid-context7-accounts")
+            with open(invalid_file, "wb") as handle:
+                handle.write(b"\xff\xfe")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "EYES_CONTEXT7_ACCOUNTS": "",
+                    "EYES_CONTEXT7_ACCOUNTS_FILE": invalid_file,
+                },
+            ):
+                self.assertEqual(asset_management.load_context7_accounts(), [])
+
     def test_context7_pool_fails_over_and_caches_success(self):
         accounts = [
             {"label": "first", "_api_key": "ctx7sk-first"},

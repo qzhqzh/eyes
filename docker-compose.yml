@@ -12,6 +12,7 @@ services:
       - ./eyes.db:/app/data/eyes.db
       - /mnt/nas:/mnt/nas:ro
       - ${EYES_GATEWAY_CONFIG_DIR_HOST:-../../gateway/nginx/conf.d}:/gateway/nginx/conf.d:ro
+      - ${EYES_ASSET_API_TOKEN_FILE_HOST:-/dev/null}:/run/secrets/eyes-asset-api-token:ro
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       EYES_DB_PATH: /app/data/eyes.db
@@ -20,6 +21,7 @@ services:
       EYES_WEB_PASSWORD: ${EYES_WEB_PASSWORD:?set EYES_WEB_PASSWORD in .env}
       EYES_HUB_ENROLL_TOKEN: ${EYES_HUB_ENROLL_TOKEN:-}
       EYES_ASSET_API_TOKEN: ${EYES_ASSET_API_TOKEN:-}
+      EYES_ASSET_API_TOKEN_FILE: /run/secrets/eyes-asset-api-token
       EYES_ASSET_MCP_RATE_LIMIT_PER_MINUTE: ${EYES_ASSET_MCP_RATE_LIMIT_PER_MINUTE:-30}
       EYES_ASSET_MCP_ALLOWED_ORIGINS: ${EYES_ASSET_MCP_ALLOWED_ORIGINS:-}
       EYES_ENABLE_SCHEDULED_CHECKS: ${EYES_ENABLE_SCHEDULED_CHECKS:-0}
@@ -42,11 +44,13 @@ services:
     volumes:
       - ${EYES_AI_KEY_DIR_HOST:-../ai-key}:/assets/ai-key:ro
       - ${EYES_TOTEMORA_CONFIG_DIR_HOST:-../../app/Totemora/configs/example}:/assets/totemora:ro
+      - ${EYES_CONTEXT7_ACCOUNTS_FILE_HOST:-/dev/null}:/run/secrets/eyes-context7-accounts:ro
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       EYES_AI_KEY_DIR: /assets/ai-key
       EYES_TOTEMORA_CONFIG_DIR: /assets/totemora
       EYES_CONTEXT7_ACCOUNTS: ${EYES_CONTEXT7_ACCOUNTS:-}
+      EYES_CONTEXT7_ACCOUNTS_FILE: /run/secrets/eyes-context7-accounts
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9092/api/health"]
       interval: 10s

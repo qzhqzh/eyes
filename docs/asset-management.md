@@ -18,7 +18,7 @@ flowchart LR
 - Web 容器不挂载 Provider Key，也不接收 Context7 Key。
 - `eyes-asset-probe` 只监听 `127.0.0.1:9092`，负责读取本机凭据、执行探测和账号池选择。
 - Hub 从探针取得的模型状态和账号额度都不含 Key；数据库和页面不保存 Key。
-- 对外的 Context7 MCP 入口为 `/mcp/context7`，必须使用独立的 `EYES_ASSET_API_TOKEN`。
+- 对外的 Context7 MCP 入口为 `/mcp/context7`，必须使用独立的资产 API Token；推荐通过只读 Secret 文件挂载。
 - 本机上能访问 loopback 的进程仍能调用资产探针，因此 Hub 宿主机本身属于受信任边界。
 
 ## 模型聚合
@@ -35,11 +35,14 @@ flowchart LR
 
 ## Context7 账号池
 
-多个账号使用一个环境变量配置：
+推荐把多个账号写入仓库外的 Secret 文件，每行一个账号：
 
-```dotenv
-EYES_CONTEXT7_ACCOUNTS=personal=ctx7sk_xxx,work=ctx7sk_yyy
+```text
+personal=ctx7sk_xxx
+work=ctx7sk_yyy
 ```
+
+然后在 Eyes `.env` 中只写不敏感的宿主机路径：`EYES_CONTEXT7_ACCOUNTS_FILE_HOST=./data/context7-accounts`。原有 `EYES_CONTEXT7_ACCOUNTS=personal=...,work=...` 环境变量继续兼容，但会出现在容器环境元数据中，不作为生产首选。
 
 每个标签和 Key 必须唯一。请求按账号轮询；遇到 `401`、`403` 或 `429` 时自动切换到下一个账号。额度重置后，账号会重新进入候选池。成功的相同文档查询缓存 6 小时，最多保存 128 项，以减少重复消耗。
 
@@ -56,19 +59,19 @@ EYES_CONTEXT7_ACCOUNTS=personal=ctx7sk_xxx,work=ctx7sk_yyy
 EYES_AI_KEY_DIR_HOST=../ai-key
 EYES_TOTEMORA_CONFIG_DIR_HOST=../../app/Totemora/configs/example
 EYES_TOTEMORA_ENV_FILE_HOST=/path/to/totemora-provider.env
-EYES_CONTEXT7_ACCOUNTS=personal=ctx7sk_xxx,work=ctx7sk_yyy
-EYES_ASSET_API_TOKEN=至少24位的独立随机Token
+EYES_CONTEXT7_ACCOUNTS_FILE_HOST=./data/context7-accounts
+EYES_ASSET_API_TOKEN_FILE_HOST=./data/asset-api-token
 EYES_ASSET_MCP_RATE_LIMIT_PER_MINUTE=30
 ```
 
-目录不同的机器只需覆盖前两个宿主机路径。启动后检查：
+`context7-accounts` 使用上面的每行一账号格式；`asset-api-token` 只包含一行至少 24 位的独立随机 Token。两个文件都应设置为 `0600`，不得提交到仓库。目录不同的机器只需覆盖对应宿主机路径。启动后检查：
 
 ```bash
 docker compose up -d --build
 curl -fsS http://127.0.0.1:9092/api/health
 ```
 
-不要把真实 Key 或 Token 写入仓库。`.env` 已被 Git 忽略；生产部署还可进一步切换为外部 Secret 文件或 Secret Manager。
+不要把真实 Key 或 Token 写入仓库。`.env` 只保存 Secret 文件路径；后续可进一步切换为 Secret Manager。
 
 ## Agent 接入
 
@@ -81,7 +84,7 @@ http://<hub-ip>:<hub-port>/mcp/context7
 客户端需发送：
 
 ```text
-Authorization: Bearer <EYES_ASSET_API_TOKEN>
+Authorization: Bearer <asset-api-token 文件内容>
 ```
 
 MCP 暴露两个工具：

@@ -143,7 +143,7 @@ function renderModels(models) {
 function renderContext7(accounts, mcpEnabled) {
     const grid = document.getElementById('context7-assets');
     if (!accounts.length) {
-        grid.innerHTML = '<div class="e-card asset-empty">尚未配置 Context7 账号。请在部署环境设置 <code>EYES_CONTEXT7_ACCOUNTS</code>，格式为 <code>personal=ctx7sk…,work=ctx7sk…</code>。</div>';
+        grid.innerHTML = '<div class="e-card asset-empty">尚未配置 Context7 账号。推荐通过 <code>EYES_CONTEXT7_ACCOUNTS_FILE_HOST</code> 挂载只读账号文件；也兼容 <code>EYES_CONTEXT7_ACCOUNTS</code> 环境变量。</div>';
     } else {
         grid.innerHTML = accounts.map(account => {
             const knownQuota = account.remaining != null && account.limit != null && account.limit > 0;

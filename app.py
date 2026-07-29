@@ -37,13 +37,31 @@ from asset_client import (
     fetch_model_assets,
 )
 
+
+def _secret_value(env_name, file_env_name, max_bytes=4096):
+    direct = os.environ.get(env_name, "").strip()
+    if direct:
+        return direct
+    file_path = os.environ.get(file_env_name, "").strip()
+    if not file_path:
+        return ""
+    try:
+        with open(file_path, encoding="utf-8") as handle:
+            value = handle.read(max_bytes + 1).strip()
+    except (OSError, UnicodeError):
+        return ""
+    return value if len(value.encode("utf-8")) <= max_bytes else ""
+
+
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 secure_config_required = os.environ.get("EYES_REQUIRE_SECURE_CONFIG") == "1"
 configured_secret = os.environ.get("EYES_SECRET_KEY", "")
 configured_web_password = os.environ.get("EYES_WEB_PASSWORD", "")
 configured_enroll_token = os.environ.get("EYES_HUB_ENROLL_TOKEN", "")
-configured_asset_api_token = os.environ.get("EYES_ASSET_API_TOKEN", "")
+configured_asset_api_token = _secret_value(
+    "EYES_ASSET_API_TOKEN", "EYES_ASSET_API_TOKEN_FILE"
+)
 secure_values = (configured_secret, configured_web_password, configured_enroll_token)
 if secure_config_required and (
     not configured_secret
@@ -58,7 +76,7 @@ if secure_config_required and (
     raise RuntimeError(
         "set non-placeholder EYES_SECRET_KEY (32+ chars), EYES_WEB_PASSWORD "
         "(12+ chars), and optional EYES_HUB_ENROLL_TOKEN/EYES_ASSET_API_TOKEN "
-        "(24+ chars)"
+        "or EYES_ASSET_API_TOKEN_FILE (24+ chars)"
     )
 app.secret_key = configured_secret or secrets.token_urlsafe(32)
 

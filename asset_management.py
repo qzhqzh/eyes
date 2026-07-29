@@ -277,8 +277,18 @@ def get_model_assets(ai_key_dir, totemora_config_dir, refresh=False):
 
 
 def load_context7_accounts(raw=None):
-    """Parse label=ctx7sk entries from one secret environment variable."""
-    raw = os.environ.get("EYES_CONTEXT7_ACCOUNTS", "") if raw is None else raw
+    """Parse label=ctx7sk entries from a secret file or environment variable."""
+    if raw is None:
+        raw = os.environ.get("EYES_CONTEXT7_ACCOUNTS", "")
+        accounts_file = os.environ.get("EYES_CONTEXT7_ACCOUNTS_FILE", "")
+        if not raw and accounts_file:
+            try:
+                with open(accounts_file, encoding="utf-8") as handle:
+                    raw = handle.read(64 * 1024 + 1)
+                if len(raw.encode("utf-8")) > 64 * 1024:
+                    raw = ""
+            except (OSError, UnicodeError):
+                raw = ""
     accounts = []
     seen_keys = set()
     seen_labels = set()

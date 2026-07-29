@@ -9,20 +9,32 @@ class WebAppSmokeTest(unittest.TestCase):
     def test_logged_in_fleet_view_and_summary_render(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             env = os.environ.copy()
+            asset_token_file = os.path.join(temp_dir, "asset-api-token")
+            with open(asset_token_file, "w", encoding="utf-8") as handle:
+                handle.write("asset-smoke-token-123456789")
+            invalid_secret_file = os.path.join(temp_dir, "invalid-secret")
+            with open(invalid_secret_file, "wb") as handle:
+                handle.write(b"\xff\xfe")
+            env.pop("EYES_ASSET_API_TOKEN", None)
             env.update(
                 {
                     "EYES_DB_PATH": os.path.join(temp_dir, "eyes-web-test.db"),
                     "EYES_SECRET_KEY": "web-smoke-secret-key",
                     "EYES_WEB_PASSWORD": "web-smoke-password",
-                    "EYES_ASSET_API_TOKEN": "asset-smoke-token-123456789",
+                    "EYES_ASSET_API_TOKEN_FILE": asset_token_file,
+                    "EYES_INVALID_SECRET_FILE": invalid_secret_file,
                     "EYES_ENABLE_SCHEDULED_CHECKS": "0",
                 }
             )
             script = """
 import os
 from unittest import mock
-from app import app
+from app import app, _secret_value
 client = app.test_client()
+assert _secret_value('EYES_MISSING_SECRET', 'EYES_INVALID_SECRET_FILE') == ''
+os.environ['EYES_DIRECT_TEST_SECRET'] = 'direct-secret-value'
+os.environ['EYES_DIRECT_TEST_SECRET_FILE'] = os.environ['EYES_ASSET_API_TOKEN_FILE']
+assert _secret_value('EYES_DIRECT_TEST_SECRET', 'EYES_DIRECT_TEST_SECRET_FILE') == 'direct-secret-value'
 assert client.get('/fleet').status_code == 302
 assert client.get('/api/v1/fleet/summary').status_code == 401
 with client.session_transaction() as session:
