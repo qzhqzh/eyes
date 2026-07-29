@@ -42,7 +42,7 @@ personal=ctx7sk_xxx
 work=ctx7sk_yyy
 ```
 
-然后在 Eyes `.env` 中只写不敏感的宿主机路径：`EYES_CONTEXT7_ACCOUNTS_FILE_HOST=./data/context7-accounts`。原有 `EYES_CONTEXT7_ACCOUNTS=personal=...,work=...` 环境变量继续兼容，但会出现在容器环境元数据中，不作为生产首选。
+然后在 Eyes `.env` 中只写不敏感的宿主机路径：`EYES_CONTEXT7_ACCOUNTS_FILE_HOST=./.eyes-secrets/context7-accounts`。原有 `EYES_CONTEXT7_ACCOUNTS=personal=...,work=...` 环境变量继续兼容，但会出现在容器环境元数据中，不作为生产首选。
 
 每个标签和 Key 必须唯一。请求按账号轮询；遇到 `401`、`403` 或 `429` 时自动切换到下一个账号。额度重置后，账号会重新进入候选池。成功的相同文档查询缓存 6 小时，最多保存 128 项，以减少重复消耗。
 
@@ -59,8 +59,8 @@ work=ctx7sk_yyy
 EYES_AI_KEY_DIR_HOST=../ai-key
 EYES_TOTEMORA_CONFIG_DIR_HOST=../../app/Totemora/configs/example
 EYES_TOTEMORA_ENV_FILE_HOST=/path/to/totemora-provider.env
-EYES_CONTEXT7_ACCOUNTS_FILE_HOST=./data/context7-accounts
-EYES_ASSET_API_TOKEN_FILE_HOST=./data/asset-api-token
+EYES_CONTEXT7_ACCOUNTS_FILE_HOST=./.eyes-secrets/context7-accounts
+EYES_ASSET_API_TOKEN_FILE_HOST=./.eyes-secrets/asset-api-token
 EYES_ASSET_MCP_RATE_LIMIT_PER_MINUTE=30
 ```
 

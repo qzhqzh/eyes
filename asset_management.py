@@ -294,7 +294,7 @@ def load_context7_accounts(raw=None):
     seen_labels = set()
     for index, entry in enumerate(raw.replace("\n", ",").split(","), start=1):
         entry = entry.strip()
-        if not entry:
+        if not entry or entry.startswith("#"):
             continue
         if "=" in entry:
             label, api_key = entry.split("=", 1)

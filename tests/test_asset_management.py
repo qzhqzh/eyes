@@ -165,7 +165,11 @@ class AssetManagementTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             accounts_file = os.path.join(temp_dir, "context7-accounts")
             with open(accounts_file, "w", encoding="utf-8") as handle:
-                handle.write("personal=ctx7sk-file-one\nwork=ctx7sk-file-two\n")
+                handle.write(
+                    "# Example: label=ctx7sk_placeholder\n"
+                    "personal=ctx7sk-file-one\n"
+                    "work=ctx7sk-file-two\n"
+                )
             with mock.patch.dict(
                 os.environ,
                 {
