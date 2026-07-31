@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}eyes — 资产管理{% endblock %}
+
+{% block extra_css %}
+<style>
+    .asset-page { width: 100%; }
+    .asset-header { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--eyes-spacing); margin-bottom:var(--eyes-spacing-lg); }
+    .asset-title { color:var(--eyes-text-primary); font-size:var(--eyes-font-size-lg); font-weight:var(--eyes-font-weight-medium); }
+    .asset-subtitle { max-width:72ch; margin-top:2px; color:var(--eyes-text-muted); font-size:var(--eyes-font-size-sm); }
+    .asset-summary { display:flex; align-items:center; gap:var(--eyes-spacing-lg); min-height:58px; margin-bottom:var(--eyes-spacing); padding:var(--eyes-spacing); }
+    .asset-summary-item { color:var(--eyes-text-muted); font-size:var(--eyes-font-size-sm); }
+    .asset-summary-value { margin-left:4px; color:var(--eyes-text-primary); font-size:var(--eyes-font-size-lg); font-weight:var(--eyes-font-weight-semibold); }
+    .asset-section { margin-top:var(--eyes-spacing); }
+    .asset-section-head { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--eyes-spacing); margin-bottom:var(--eyes-spacing-sm); }
+    .asset-section-title { color:var(--eyes-text-primary); font-size:var(--eyes-font-size-md); font-weight:var(--eyes-font-weight-semibold); }
+    .asset-section-note { margin-top:2px; color:var(--eyes-text-muted); font-size:var(--eyes-font-size-xs); }
+    .asset-table-wrap { overflow-x:auto; }
+    .asset-table { width:100%; border-collapse:collapse; font-size:var(--eyes-font-size-sm); }
+    .asset-table th { padding:10px 12px; border-bottom:1px solid var(--eyes-border); color:var(--eyes-text-muted); font-size:var(--eyes-font-size-xs); font-weight:500; text-align:left; white-space:nowrap; }
+    .asset-table td { padding:11px 12px; border-bottom:1px solid var(--eyes-border); color:var(--eyes-text-secondary); vertical-align:middle; }
+    .asset-table tbody tr:last-child td { border-bottom:0; }
+    .asset-model { color:var(--eyes-text-primary); font-weight:600; white-space:nowrap; }
+    .asset-meta { color:var(--eyes-text-muted); font-size:var(--eyes-font-size-xs); }
+    .asset-state { display:inline-flex; align-items:center; gap:6px; font-weight:600; white-space:nowrap; }
+    .asset-dot { width:7px; height:7px; border-radius:50%; }
+    .context7-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:var(--eyes-spacing); }
+    .quota-number { color:var(--eyes-text-primary); font-size:24px; font-weight:650; letter-spacing:-.02em; }
+    .quota-track { height:5px; margin-top:var(--eyes-spacing-sm); overflow:hidden; background:var(--eyes-border); border-radius:var(--eyes-radius-full); }
+    .quota-fill { height:100%; border-radius:inherit; background:var(--eyes-success); }
+    .asset-endpoint { display:flex; align-items:center; justify-content:space-between; gap:var(--eyes-spacing); padding:var(--eyes-spacing); margin-top:var(--eyes-spacing); background:var(--eyes-bg-input); border-radius:var(--eyes-radius-sm); }
+    .asset-code { overflow:hidden; color:var(--eyes-text-secondary); font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:var(--eyes-font-size-xs); text-overflow:ellipsis; white-space:nowrap; }
+    .asset-empty { padding:28px; color:var(--eyes-text-muted); font-size:var(--eyes-font-size-sm); text-align:center; }
+    @media (max-width:720px) { .asset-header,.asset-section-head,.asset-endpoint { align-items:flex-start; flex-direction:column; } .asset-summary { align-items:flex-start; flex-direction:column; gap:var(--eyes-spacing-xs); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="eyes-app-shell">
+    {% include "_sidebar.html" %}
+    <main class="eyes-app-main">
+        <div class="asset-page">
+            <header class="asset-header">
+                <div>
+                    <h1 class="asset-title">资产管理</h1>
+                    <p class="asset-subtitle">汇总可供 Agent 调用的模型与 Context7 账号池。凭据只存在于本机资产探针，页面仅显示脱敏后的可用性与额度。</p>
+                </div>
+                <button class="e-btn e-btn-outline" id="refresh-assets" type="button">刷新全部</button>
+            </header>
+
+            <section class="e-card asset-summary" id="asset-summary" aria-live="polite">正在读取资产目录…</section>
+
+            <section class="asset-section" aria-labelledby="model-assets-title">
+                <div class="asset-section-head">
+                    <div>
+                        <h2 class="asset-section-title" id="model-assets-title">模型聚合</h2>
+                        <p class="asset-section-note">ai-key 是真实 Provider 来源；Totemora 成员仅作为模型使用关系合并。刷新会执行一次最小 1 token 探测。</p>
+                    </div>
+                    <button class="e-btn e-btn-sm e-btn-ghost" id="refresh-models" type="button">刷新模型</button>
+                </div>
+                <div class="e-card asset-table-wrap">
+                    <table class="asset-table">
+                        <thead><tr><th>Provider / 模型</th><th>协议</th><th>来源与使用者</th><th>连通状态</th><th>延迟</th></tr></thead>
+                        <tbody id="model-assets"><tr><td colspan="5">正在检查模型资产…</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="asset-section" aria-labelledby="context7-assets-title">
+                <div class="asset-section-head">
+                    <div>
+                        <h2 class="asset-section-title" id="context7-assets-title">Context7 服务聚合</h2>
+                        <p class="asset-section-note">账号按轮询与失败切换方式组成单一 MCP 服务；剩余额度取自 Context7 RateLimit 响应头。</p>
+                    </div>
+                    <button class="e-btn e-btn-sm e-btn-ghost" id="refresh-context7" type="button">刷新额度</button>
+                </div>
+                <div class="context7-grid" id="context7-assets" aria-live="polite"></div>
+                <div class="e-card asset-endpoint">
+                    <div style="min-width:0;">
+                        <div style="color:var(--eyes-text-primary);font-size:var(--eyes-font-size-sm);font-weight:600;">Agent 统一 MCP 地址</div>
+                        <div class="asset-code" id="context7-mcp-url"></div>
+                    </div>
+                    <span id="mcp-state" style="font-size:var(--eyes-font-size-xs);"></span>
+                </div>
+            </section>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const modelStates = {
+    healthy: ['可用', 'var(--eyes-success)'],
+    unconfigured: ['未配置 Key', 'var(--eyes-text-muted)'],
+    auth_error: ['鉴权失败', 'var(--eyes-danger)'],
+    quota_exhausted: ['额度耗尽', 'var(--eyes-warning)'],
+    rate_limited: ['频率受限', 'var(--eyes-warning)'],
+    provider_error: ['Provider 异常', 'var(--eyes-danger)'],
+    unreachable: ['不可达', 'var(--eyes-danger)'],
+    unsafe_config: ['配置被拒绝', 'var(--eyes-danger)'],
+};
+const context7States = {
+    healthy: ['可用', 'var(--eyes-success)'],
+    quota_exhausted: ['额度耗尽', 'var(--eyes-warning)'],
+    auth_error: ['鉴权失败', 'var(--eyes-danger)'],
+    service_error: ['服务异常', 'var(--eyes-danger)'],
+    unreachable: ['不可达', 'var(--eyes-danger)'],
+};
+let currentModels = [];
+let currentContext7 = [];
+
+function escapeAssetText(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, character => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'
+    })[character]);
+}
+
+function stateMarkup(state, mapping) {
+    const [label, color] = mapping[state] || ['未知', 'var(--eyes-text-muted)'];
+    return `<span class="asset-state" style="color:${color};"><span class="asset-dot" style="background:${color};"></span>${label}</span>`;
+}
+
+function renderModels(models) {
+    const body = document.getElementById('model-assets');
+    if (!models.length) {
+        body.innerHTML = '<tr><td colspan="5" class="asset-empty">未发现 ai-key 或 Totemora 模型配置</td></tr>';
+        return;
+    }
+    body.innerHTML = models.map(item => {
+        const agents = item.agents && item.agents.length ? ` · ${item.agents.map(escapeAssetText).join(', ')}` : '';
+        const status = item.status_code ? ` · HTTP ${item.status_code}` : '';
+        return `<tr>
+            <td><div class="asset-model">${escapeAssetText(item.model)}</div><div class="asset-meta">${escapeAssetText(item.provider_name || item.provider)} · ${escapeAssetText(item.base_url)}</div></td>
+            <td>${escapeAssetText(item.api_mode)}</td>
+            <td><span>${(item.sources || []).map(escapeAssetText).join(' + ')}</span><span class="asset-meta">${agents}</span></td>
+            <td>${stateMarkup(item.state, modelStates)}<span class="asset-meta">${status}</span></td>
+            <td>${item.latency_ms == null ? '—' : `${item.latency_ms}ms`}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderContext7(accounts, mcpEnabled) {
+    const grid = document.getElementById('context7-assets');
+    if (!accounts.length) {
+        grid.innerHTML = '<div class="e-card asset-empty">尚未配置 Context7 账号。推荐通过 <code>EYES_CONTEXT7_ACCOUNTS_FILE_HOST</code> 挂载只读账号文件；也兼容 <code>EYES_CONTEXT7_ACCOUNTS</code> 环境变量。</div>';
+    } else {
+        grid.innerHTML = accounts.map(account => {
+            const knownQuota = account.remaining != null && account.limit != null && account.limit > 0;
+            const percent = knownQuota ? Math.max(0, Math.min(100, account.remaining / account.limit * 100)) : 0;
+            const remaining = account.remaining == null ? '未知' : account.remaining;
+            const total = account.limit == null ? '未返回总额' : `共 ${account.limit}`;
+            const reset = account.reset_at ? new Date(account.reset_at * 1000).toLocaleString('zh-CN', {hour12:false}) : '重置时间未知';
+            return `<article class="e-card"><div class="e-card-body">
+                <div class="flex items-center justify-between gap-2"><strong style="color:var(--eyes-text-primary);">${escapeAssetText(account.label)}</strong>${stateMarkup(account.state, context7States)}</div>
+                <div style="margin-top:var(--eyes-spacing);"><span class="quota-number">${remaining}</span><span class="asset-meta"> 次剩余 · ${total}</span></div>
+                <div class="quota-track"><div class="quota-fill" style="width:${percent}%;"></div></div>
+                <div class="flex items-center justify-between gap-2" style="margin-top:var(--eyes-spacing-sm);"><span class="asset-meta">${escapeAssetText(reset)}</span><span class="asset-meta">${account.latency_ms ?? '—'}ms</span></div>
+            </div></article>`;
+        }).join('');
+    }
+    const mcpState = document.getElementById('mcp-state');
+    mcpState.textContent = mcpEnabled ? '已启用 Bearer 鉴权' : '未配置访问 Token';
+    mcpState.style.color = mcpEnabled ? 'var(--eyes-success)' : 'var(--eyes-warning)';
+}
+
+function renderSummary() {
+    const healthyModels = currentModels.filter(item => item.state === 'healthy').length;
+    const usableAccounts = currentContext7.filter(item => item.state === 'healthy').length;
+    const knownAccounts = currentContext7.filter(item => item.remaining != null);
+    const remaining = knownAccounts.length
+        ? knownAccounts.reduce((sum, item) => sum + Number(item.remaining), 0)
+        : '—';
+    document.getElementById('asset-summary').innerHTML = `
+        <span class="asset-summary-item">模型 <strong class="asset-summary-value">${currentModels.length}</strong></span>
+        <span class="asset-summary-item" style="color:var(--eyes-success);">可用 ${healthyModels}</span>
+        <span class="asset-summary-item">Context7 账号 <strong class="asset-summary-value">${currentContext7.length}</strong></span>
+        <span class="asset-summary-item" style="color:var(--eyes-success);">可用 ${usableAccounts}</span>
+        <span class="asset-summary-item">已知剩余额度 <strong class="asset-summary-value">${remaining}</strong></span>`;
+}
+
+async function loadModels(refresh = false) {
+    const response = await fetch(`/api/assets/models${refresh ? '?refresh=1' : ''}`);
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || '模型资产加载失败');
+    currentModels = payload.models || [];
+    renderModels(currentModels);
+    renderSummary();
+}
+
+async function loadContext7(refresh = false) {
+    const response = await fetch(`/api/assets/context7${refresh ? '?refresh=1' : ''}`);
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'Context7 资产加载失败');
+    currentContext7 = payload.accounts || [];
+    renderContext7(currentContext7, payload.mcp_enabled);
+    renderSummary();
+}
+
+async function withBusy(button, label, action) {
+    button.disabled = true;
+    const previous = button.textContent;
+    button.textContent = label;
+    try {
+        await action();
+    } catch (error) {
+        EyesUI.toast(error.message, 'error');
+    } finally {
+        button.disabled = false;
+        button.textContent = previous;
+    }
+}
+
+document.getElementById('context7-mcp-url').textContent = `${location.origin}/mcp/context7`;
+document.getElementById('refresh-models').addEventListener('click', event => withBusy(event.currentTarget, '探测中…', () => loadModels(true)));
+document.getElementById('refresh-context7').addEventListener('click', event => withBusy(event.currentTarget, '查询中…', () => loadContext7(true)));
+document.getElementById('refresh-assets').addEventListener('click', event => withBusy(event.currentTarget, '刷新中…', () => Promise.all([loadModels(true), loadContext7(true)])));
+Promise.all([loadModels(), loadContext7()]).catch(error => EyesUI.toast(error.message, 'error'));
+</script>
+{% endblock %}

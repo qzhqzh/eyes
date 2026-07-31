@@ -184,6 +184,8 @@ python3 agent/eyes-agent.py \
 
 登录 `http://<hub-ip>:8090/` 查看 Hub 本机健康检查，进入 `http://<hub-ip>:8090/fleet` 查看全部节点的联通状态、在线资源汇总和结构化节点详情。两者的统计口径不同，详见 [观测作用域与统计口径](docs/observability-scopes.md)。管理密码来自 `.env` 的 `EYES_WEB_PASSWORD`。
 
+进入 `http://<hub-ip>:8090/assets` 可查看模型与 Context7 资产。模型凭据只由 loopback 资产探针读取；配置多个 Context7 账号和 Agent MCP Token 的方法见 [资产管理与 Agent 服务聚合](docs/asset-management.md)。
+
 远程节点默认只连接 HTTPS Hub；`http://127.0.0.1`、`http://localhost` 仅用于本机开发。受控测试网络若暂时没有 TLS，可显式添加 `--allow-insecure-http`。
 
 Linux 节点可执行 `sudo sh agent/install.sh` 安装 systemd 单元和配置模板，然后编辑 `/etc/eyes/agent.env`。

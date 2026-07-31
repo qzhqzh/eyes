@@ -3,6 +3,7 @@ config.yaml
 .env
 .vps
 .pve
+.eyes-secrets/
 
 # 自动生成的文件（由 --sync 生成）
 conf.d/_nginx_*.yaml

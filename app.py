@@ -5,10 +5,12 @@ import os
 import functools
 import fcntl
 import hmac
+import json
 import secrets
 import subprocess
 import re
 import threading
+import time
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -28,6 +30,28 @@ from hub_node import refresh_local_hub_node
 from hub_api import hub_api
 from network_status import collect_wireguard_with_agent, mounted_filesystem_type
 from domain_status import collect_domain_status
+from asset_client import (
+    AssetProbeError,
+    call_context7_pool,
+    fetch_context7_accounts,
+    fetch_model_assets,
+)
+
+
+def _secret_value(env_name, file_env_name, max_bytes=4096):
+    direct = os.environ.get(env_name, "").strip()
+    if direct:
+        return direct
+    file_path = os.environ.get(file_env_name, "").strip()
+    if not file_path:
+        return ""
+    try:
+        with open(file_path, encoding="utf-8") as handle:
+            value = handle.read(max_bytes + 1).strip()
+    except (OSError, UnicodeError):
+        return ""
+    return value if len(value.encode("utf-8")) <= max_bytes else ""
+
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
@@ -35,6 +59,9 @@ secure_config_required = os.environ.get("EYES_REQUIRE_SECURE_CONFIG") == "1"
 configured_secret = os.environ.get("EYES_SECRET_KEY", "")
 configured_web_password = os.environ.get("EYES_WEB_PASSWORD", "")
 configured_enroll_token = os.environ.get("EYES_HUB_ENROLL_TOKEN", "")
+configured_asset_api_token = _secret_value(
+    "EYES_ASSET_API_TOKEN", "EYES_ASSET_API_TOKEN_FILE"
+)
 secure_values = (configured_secret, configured_web_password, configured_enroll_token)
 if secure_config_required and (
     not configured_secret
@@ -42,11 +69,14 @@ if secure_config_required and (
     or len(configured_secret) < 32
     or len(configured_web_password) < 12
     or (configured_enroll_token and len(configured_enroll_token) < 24)
+    or (configured_asset_api_token and len(configured_asset_api_token) < 24)
     or any(value.lower().startswith("replace-with-") for value in secure_values)
+    or configured_asset_api_token.lower().startswith("replace-with-")
 ):
     raise RuntimeError(
         "set non-placeholder EYES_SECRET_KEY (32+ chars), EYES_WEB_PASSWORD "
-        "(12+ chars), and optional EYES_HUB_ENROLL_TOKEN (24+ chars)"
+        "(12+ chars), and optional EYES_HUB_ENROLL_TOKEN/EYES_ASSET_API_TOKEN "
+        "or EYES_ASSET_API_TOKEN_FILE (24+ chars)"
     )
 app.secret_key = configured_secret or secrets.token_urlsafe(32)
 
@@ -66,6 +96,36 @@ app.register_blueprint(hub_api)
 # 配置目录
 CONF_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "conf.d")
 GATEWAY_CONFIG_DIR = os.environ.get("EYES_GATEWAY_CONFIG_DIR", "/gateway/nginx/conf.d")
+ASSET_PROBE_URL = os.environ.get("EYES_ASSET_PROBE_URL", "http://127.0.0.1:9092")
+SUPPORTED_MCP_PROTOCOL_VERSION = "2025-03-26"
+
+
+def _bounded_env_int(name, default, minimum, maximum):
+    try:
+        value = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
+ASSET_MCP_RATE_LIMIT_PER_MINUTE = _bounded_env_int(
+    "EYES_ASSET_MCP_RATE_LIMIT_PER_MINUTE", 30, 1, 600
+)
+ASSET_MCP_MAX_REQUEST_BYTES = _bounded_env_int(
+    "EYES_ASSET_MCP_MAX_REQUEST_BYTES", 32768, 1024, 1024 * 1024
+)
+ASSET_MCP_MAX_QUERY_CHARS = _bounded_env_int(
+    "EYES_ASSET_MCP_MAX_QUERY_CHARS", 2000, 64, 8000
+)
+ASSET_MCP_ALLOWED_ORIGINS = {
+    item.strip()
+    for item in os.environ.get("EYES_ASSET_MCP_ALLOWED_ORIGINS", "").split(",")
+    if item.strip()
+}
+ASSET_MCP_RATE_CLEANUP_INTERVAL_SECONDS = 60
+_asset_mcp_request_times = {}
+_asset_mcp_rate_lock = threading.Lock()
+_asset_mcp_last_cleanup = 0.0
 
 
 def collect_stats():
@@ -369,6 +429,231 @@ def domain_status(domain):
     if not results:
         return jsonify({"error": "domain is not configured"}), 404
     return jsonify(results[0])
+
+
+@app.route("/assets")
+@login_required
+def assets():
+    """Model and Context7 asset aggregation dashboard."""
+    return render_template(
+        "assets.html",
+        active_page="assets",
+        asset_mcp_enabled=bool(configured_asset_api_token),
+    )
+
+
+@app.route("/api/assets/models", methods=["GET"])
+@login_required
+def asset_models():
+    try:
+        return jsonify({
+            "models": fetch_model_assets(
+                ASSET_PROBE_URL, refresh=request.args.get("refresh") == "1"
+            )
+        })
+    except AssetProbeError as exc:
+        return jsonify({"error": str(exc)}), 503
+
+
+@app.route("/api/assets/context7", methods=["GET"])
+@login_required
+def asset_context7():
+    try:
+        return jsonify({
+            "accounts": fetch_context7_accounts(
+                ASSET_PROBE_URL, refresh=request.args.get("refresh") == "1"
+            ),
+            "mcp_enabled": bool(configured_asset_api_token),
+        })
+    except AssetProbeError as exc:
+        return jsonify({"error": str(exc)}), 503
+
+
+def _mcp_error(request_id, code, message):
+    return jsonify({
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "error": {"code": code, "message": message},
+    })
+
+
+def _asset_mcp_rate_allowed(client_key):
+    global _asset_mcp_last_cleanup
+    now = time.monotonic()
+    with _asset_mcp_rate_lock:
+        if (
+            now - _asset_mcp_last_cleanup
+            >= ASSET_MCP_RATE_CLEANUP_INTERVAL_SECONDS
+        ):
+            for key, seen_times in list(_asset_mcp_request_times.items()):
+                active_times = [
+                    seen_at for seen_at in seen_times if now - seen_at < 60
+                ]
+                if active_times:
+                    _asset_mcp_request_times[key] = active_times
+                else:
+                    _asset_mcp_request_times.pop(key, None)
+            _asset_mcp_last_cleanup = now
+
+        recent = [
+            seen_at
+            for seen_at in _asset_mcp_request_times.get(client_key, [])
+            if now - seen_at < 60
+        ]
+        if len(recent) >= ASSET_MCP_RATE_LIMIT_PER_MINUTE:
+            _asset_mcp_request_times[client_key] = recent
+            return False
+        recent.append(now)
+        _asset_mcp_request_times[client_key] = recent
+        return True
+
+
+def _context7_mcp_tools():
+    return [
+        {
+            "name": "resolve-library-id",
+            "title": "Resolve Context7 Library ID",
+            "description": "Search Context7 for the library ID that best matches a package or product.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "libraryName": {"type": "string"},
+                    "query": {"type": "string"},
+                },
+                "required": ["libraryName", "query"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "query-docs",
+            "title": "Query Context7 Documentation",
+            "description": "Retrieve current documentation snippets for an exact Context7 library ID.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "libraryId": {"type": "string"},
+                    "query": {"type": "string"},
+                },
+                "required": ["libraryId", "query"],
+                "additionalProperties": False,
+            },
+        },
+    ]
+
+
+@app.route("/mcp/context7", methods=["POST"])
+def context7_mcp():
+    """Stateless MCP facade backed by the local multi-account Context7 pool."""
+    if not configured_asset_api_token:
+        return _mcp_error(None, -32001, "asset MCP is not configured"), 503
+    authorization = request.headers.get("Authorization", "")
+    expected = f"Bearer {configured_asset_api_token}"
+    if not hmac.compare_digest(authorization, expected):
+        return _mcp_error(None, -32001, "MCP authorization failed"), 401
+
+    origin = request.headers.get("Origin")
+    if origin and origin not in ASSET_MCP_ALLOWED_ORIGINS:
+        return _mcp_error(None, -32001, "MCP origin is not allowed"), 403
+    if request.content_length is not None and (
+        request.content_length <= 0
+        or request.content_length > ASSET_MCP_MAX_REQUEST_BYTES
+    ):
+        return _mcp_error(None, -32600, "invalid MCP request size"), 413
+    client_key = request.remote_addr or "unknown"
+    if not _asset_mcp_rate_allowed(client_key):
+        response = _mcp_error(None, -32003, "MCP request rate limit exceeded")
+        response.headers["Retry-After"] = "60"
+        return response, 429
+
+    raw_payload = request.stream.read(ASSET_MCP_MAX_REQUEST_BYTES + 1)
+    if not raw_payload or len(raw_payload) > ASSET_MCP_MAX_REQUEST_BYTES:
+        return _mcp_error(None, -32600, "invalid MCP request size"), 413
+    try:
+        payload = json.loads(raw_payload)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        payload = None
+    if not isinstance(payload, dict) or payload.get("jsonrpc") != "2.0":
+        return _mcp_error(None, -32600, "invalid JSON-RPC request"), 400
+    request_id = payload.get("id")
+    method = payload.get("method")
+    protocol_version = request.headers.get("MCP-Protocol-Version")
+    if (
+        method != "initialize"
+        and protocol_version
+        and protocol_version != SUPPORTED_MCP_PROTOCOL_VERSION
+    ):
+        return _mcp_error(
+            request_id, -32600, "unsupported MCP protocol version"
+        ), 400
+    if method == "notifications/initialized":
+        return "", 202
+    if method == "initialize":
+        return jsonify({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "result": {
+                "protocolVersion": SUPPORTED_MCP_PROTOCOL_VERSION,
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": {"name": "eyes-context7-pool", "version": "0.1.0"},
+                "instructions": "Context7 documentation tools use a pooled account quota managed by Eyes.",
+            },
+        })
+    if method == "tools/list":
+        return jsonify({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "result": {"tools": _context7_mcp_tools()},
+        })
+    if method != "tools/call":
+        return _mcp_error(request_id, -32601, "method not found")
+
+    params = payload.get("params") or {}
+    if not isinstance(params, dict):
+        return _mcp_error(request_id, -32602, "invalid tool parameters")
+    tool_name = params.get("name")
+    arguments = params.get("arguments") or {}
+    if not isinstance(arguments, dict):
+        return _mcp_error(request_id, -32602, "invalid tool arguments")
+    if tool_name == "resolve-library-id":
+        path = "/api/v2/libs/search"
+        api_params = {
+            "libraryName": arguments.get("libraryName", ""),
+            "query": arguments.get("query", ""),
+        }
+    elif tool_name == "query-docs":
+        path = "/api/v2/context"
+        api_params = {
+            "libraryId": arguments.get("libraryId", ""),
+            "query": arguments.get("query", ""),
+            "type": "json",
+        }
+    else:
+        return _mcp_error(request_id, -32602, "unknown tool")
+    required_values = [
+        value for key, value in api_params.items() if key != "type"
+    ]
+    if (
+        not all(isinstance(value, str) and value.strip() for value in required_values)
+        or any(len(value) > ASSET_MCP_MAX_QUERY_CHARS for value in required_values)
+    ):
+        return _mcp_error(
+            request_id, -32602, "missing or oversized tool arguments"
+        )
+
+    try:
+        result = call_context7_pool(ASSET_PROBE_URL, path, api_params)
+    except AssetProbeError as exc:
+        return _mcp_error(request_id, -32002, str(exc)), 503
+    body = result.get("body")
+    is_error = int(result.get("status_code", 500)) >= 400
+    text_body = json.dumps(body, ensure_ascii=False) if not isinstance(body, str) else body
+    tool_result = {
+        "content": [{"type": "text", "text": text_body}],
+        "isError": is_error,
+    }
+    if isinstance(body, dict):
+        tool_result["structuredContent"] = body
+    return jsonify({"jsonrpc": "2.0", "id": request_id, "result": tool_result})
 
 
 @app.route("/fleet")

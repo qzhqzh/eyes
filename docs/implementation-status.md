@@ -1,6 +1,6 @@
 # 实现状态
 
-本文区分当前代码与目标设计。更新时间：2026-07-20。
+本文区分当前代码与目标设计。更新时间：2026-07-30。
 
 ## 已实现
 
@@ -45,6 +45,14 @@
 - 节点列表根据最后心跳派生 `online/stale/offline/unknown`，不会把离线节点的旧快照计入在线资源容量。
 - 旧版 Hub 本机健康检查可通过 `EYES_ENABLE_SCHEDULED_CHECKS=1` 由后台按 `check_interval` 周期运行，统计口径与 Fleet 明确分离；已有外部 cron 时默认关闭以避免重复告警。
 
+### Agent 资产聚合
+
+- `/assets` 汇总 `ai-key` 模型 Provider 与 Totemora Agent/模型使用关系，并显示脱敏后的连接状态。
+- 本机 `eyes-asset-probe` 单独持有模型与 Context7 凭据，只监听 loopback；Web 容器不挂载这些凭据。
+- 模型连通检查使用最大输出 1 token 的最小调用并缓存 5 分钟。
+- 多个 Context7 账号支持轮询、鉴权/额度失败切换、额度重置恢复和 6 小时文档查询缓存。
+- `/mcp/context7` 以独立 Bearer Token 暴露 `resolve-library-id` 与 `query-docs`，供受控网络内的 Agent 使用。
+
 ### 验证
 
 - Fleet 存储、协议鉴权、快照幂等、序列保护和 Workload 骨架单元测试。
@@ -71,6 +79,7 @@
 - Compose 将数据库持久化到 `data/eyes.db`；旧版根目录数据库升级前必须按 README 备份并迁移。
 - Agent 自报 roles/labels 尚未经过管理员审批，调度器落地前必须区分声明值与批准值。
 - Workload executor、MaintenanceAction 和 ShellSession 均未启用，因此当前没有新增远程执行入口。
+- 资产探针信任 Hub 宿主机的 loopback 访问；对外 MCP 必须设置独立 `EYES_ASSET_API_TOKEN`，公网使用前仍需 HTTPS、网关限流和审计。
 
 ## 下一批建议
 

@@ -18,6 +18,7 @@ Eyes 的长期定位是：**让接入网络的 AI Agent 能够发现、申请并
 - [演进路线](roadmap.md)：从当前代码到可用资源网络的分阶段实施与验收标准。
 - [实现状态](implementation-status.md)：目标设计中哪些已经落地、哪些仍是协议骨架。
 - [观测作用域与统计口径](observability-scopes.md)：Hub 本机健康与 Fleet 全网联通/资源的边界。
+- [资产管理与 Agent 服务聚合](asset-management.md)：模型目录、Context7 多账号池、MCP 接入与凭据边界。
 
 ## 决策状态
 
