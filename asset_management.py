@@ -20,6 +20,7 @@ from domain_status import NoRedirectHandler
 
 MODEL_CACHE_SECONDS = 300
 CONTEXT7_CACHE_SECONDS = 300
+CONTEXT7_REFRESH_COOLDOWN_SECONDS = 30
 CONTEXT7_QUERY_CACHE_SECONDS = 21600
 CONTEXT7_QUERY_CACHE_MAX_ITEMS = 128
 MAX_UPSTREAM_RESPONSE_BYTES = 4 * 1024 * 1024
@@ -37,6 +38,7 @@ _context7_query_cache = {}
 _context7_runtime = {}
 _context7_cursor = 0
 _cache_lock = threading.Lock()
+_context7_refresh_lock = threading.Lock()
 
 
 def _now_iso():
@@ -380,14 +382,28 @@ def _call_context7(api_key, path, params=None, timeout=15):
 
 
 def get_context7_accounts(refresh=False):
-    """Return quota evidence for configured accounts, never API keys."""
+    """Return quota evidence with cached, single-flight account probing."""
     accounts = load_context7_accounts()
     if not accounts:
         return []
-    with _cache_lock:
-        fresh = time.monotonic() - _context7_cache["at"] < CONTEXT7_CACHE_SECONDS
-        if _context7_cache["items"] and fresh and not refresh:
-            return _context7_cache["items"]
+
+    def cached_items():
+        with _cache_lock:
+            items = _context7_cache["items"]
+            if not items:
+                return None
+            max_age = (
+                CONTEXT7_REFRESH_COOLDOWN_SECONDS
+                if refresh
+                else CONTEXT7_CACHE_SECONDS
+            )
+            if time.monotonic() - _context7_cache["at"] < max_age:
+                return items
+        return None
+
+    cached = cached_items()
+    if cached is not None:
+        return cached
 
     def probe(account):
         started = time.monotonic()
@@ -411,12 +427,16 @@ def get_context7_accounts(refresh=False):
                 "checked_at": _now_iso(),
             }
 
-    with ThreadPoolExecutor(max_workers=min(4, len(accounts))) as executor:
-        items = list(executor.map(probe, accounts))
-    with _cache_lock:
-        _context7_runtime.update({item["label"]: item for item in items})
-        _context7_cache.update({"at": time.monotonic(), "items": items})
-    return items
+    with _context7_refresh_lock:
+        cached = cached_items()
+        if cached is not None:
+            return cached
+        with ThreadPoolExecutor(max_workers=min(4, len(accounts))) as executor:
+            items = list(executor.map(probe, accounts))
+        with _cache_lock:
+            _context7_runtime.update({item["label"]: item for item in items})
+            _context7_cache.update({"at": time.monotonic(), "items": items})
+        return items
 
 
 class Context7PoolError(RuntimeError):
