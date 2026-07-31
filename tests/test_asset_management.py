@@ -209,6 +209,26 @@ class AssetManagementTest(unittest.TestCase):
             ):
                 self.assertEqual(asset_management.load_context7_accounts(), [])
 
+    def test_context7_explicit_refresh_uses_server_side_cooldown(self):
+        accounts = [{"label": "primary", "_api_key": "ctx7sk-primary"}]
+        headers = Message()
+        headers["RateLimit-Limit"] = "100"
+        headers["RateLimit-Remaining"] = "99"
+
+        with mock.patch(
+            "asset_management.load_context7_accounts", return_value=accounts
+        ), mock.patch(
+            "asset_management._call_context7",
+            return_value=(200, b"{}", headers, 1.0),
+        ) as call:
+            first = asset_management.get_context7_accounts(refresh=True)
+            second = asset_management.get_context7_accounts(refresh=True)
+
+        self.assertEqual(call.call_count, 1)
+        self.assertIs(first, second)
+        self.assertEqual(first[0]["label"], "primary")
+        self.assertEqual(first[0]["state"], "healthy")
+
     def test_context7_pool_fails_over_and_caches_success(self):
         accounts = [
             {"label": "first", "_api_key": "ctx7sk-first"},
