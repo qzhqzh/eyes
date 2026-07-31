@@ -122,8 +122,10 @@ ASSET_MCP_ALLOWED_ORIGINS = {
     for item in os.environ.get("EYES_ASSET_MCP_ALLOWED_ORIGINS", "").split(",")
     if item.strip()
 }
+ASSET_MCP_RATE_CLEANUP_INTERVAL_SECONDS = 60
 _asset_mcp_request_times = {}
 _asset_mcp_rate_lock = threading.Lock()
+_asset_mcp_last_cleanup = 0.0
 
 
 def collect_stats():
@@ -476,8 +478,23 @@ def _mcp_error(request_id, code, message):
 
 
 def _asset_mcp_rate_allowed(client_key):
+    global _asset_mcp_last_cleanup
     now = time.monotonic()
     with _asset_mcp_rate_lock:
+        if (
+            now - _asset_mcp_last_cleanup
+            >= ASSET_MCP_RATE_CLEANUP_INTERVAL_SECONDS
+        ):
+            for key, seen_times in list(_asset_mcp_request_times.items()):
+                active_times = [
+                    seen_at for seen_at in seen_times if now - seen_at < 60
+                ]
+                if active_times:
+                    _asset_mcp_request_times[key] = active_times
+                else:
+                    _asset_mcp_request_times.pop(key, None)
+            _asset_mcp_last_cleanup = now
+
         recent = [
             seen_at
             for seen_at in _asset_mcp_request_times.get(client_key, [])
