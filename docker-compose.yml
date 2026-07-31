@@ -5,8 +5,7 @@ services:
     restart: unless-stopped
     network_mode: host
     depends_on:
-      eyes-asset-probe:
-        condition: service_healthy
+      - eyes-asset-probe
     volumes:
       - ./data:/app/data
       - ./eyes.db:/app/data/eyes.db
