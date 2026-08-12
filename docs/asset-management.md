@@ -1,6 +1,32 @@
 # 资产管理与 Agent 服务聚合
 
-Eyes 的“资产管理”页面把分散的模型配置和 Context7 账号整理为可观察、可供 Agent 使用的服务资产。页面地址为 `/assets`。
+登录 Eyes 后进入 `/assets`，可以在一个页面里查看模型配置、模型连通性、Totemora 的使用关系和 Context7 账号状态。这个页面回答的是“Agent 现在有哪些外部能力可用”，不会展示任何 Key。
+
+Context7 是可选能力。未配置账号时，页面会提示“尚未配置”，Hub、Fleet、域名管理和模型目录仍可正常使用。
+
+## 页面怎么看
+
+### 模型聚合
+
+每一行代表一个 Provider / 模型组合：
+
+- **可用**：最小探测请求成功。
+- **未配置 Key**：发现了模型关系，但资产探针没有对应凭据。
+- **鉴权失败**：Provider 拒绝当前凭据，需要检查 Key 或账号状态。
+- **额度耗尽 / 频率受限**：配置存在，但暂时不能继续调用。
+- **Provider 异常 / 不可达**：上游响应异常，或 Hub 无法建立连接。
+
+页面首次加载或点击“刷新模型”时，会发送最大输出 1 token 的最小请求。探测结果缓存 5 分钟，不会保存或显示模型回答正文。
+
+### Context7 服务聚合
+
+每张卡片代表一个已配置账号，显示可用状态、上游返回的剩余额度、恢复时间和请求延迟。额度数据来自 Context7 API 响应头；上游没有返回时会显示“未知”，Eyes 不自行估算套餐总量。
+
+“刷新额度”会触发一次真实上游探测，因此会消耗少量请求。服务端带有 60 秒防抖，连续点击不会无休止重复调用。
+
+### Agent 统一入口
+
+页面底部显示当前 Hub 的 MCP 地址和访问 Token 是否已启用。这里只显示状态，不显示 Token 内容。配置完成后，受信任 Agent 可以通过同一个地址调用 Context7 文档查询，不必逐个选择账号。
 
 ## 组件与信任边界
 
@@ -21,7 +47,7 @@ flowchart LR
 - 对外的 Context7 MCP 入口为 `/mcp/context7`，必须使用独立的资产 API Token；推荐通过只读 Secret 文件挂载。
 - 本机上能访问 loopback 的进程仍能调用资产探针，因此 Hub 宿主机本身属于受信任边界。
 
-## 模型聚合
+## 数据来源与探测规则
 
 当前目录来源：
 
@@ -29,9 +55,7 @@ flowchart LR
 - `ai-key/.env`：Provider Key，只由资产探针读取。
 - Totemora `providers.yaml` 与 `agents.yaml`：模型和 Agent 使用关系。
 
-相同 Provider/模型会合并，`qwen` 归一为 `dashscope`。只有模型 ID 完全相同时才复用 `ai-key` 的连接配置；Totemora 的 settings-file 模型不会被猜测映射到另一个 Provider 端点。使用 `api_key_env` 的 Totemora-only Provider 可通过 `EYES_TOTEMORA_ENV_FILE_HOST` 指向的只读 env 文件向资产探针注入同名变量，否则页面显示“未配置 Key”。
-
-首次读取或手动“刷新模型”会对每个已配置模型发送一个最大输出为 1 token 的最小请求。结果缓存 5 分钟，页面刷新不会反复消耗模型额度。探测不读取或展示模型回答正文。
+相同模型信息会按来源合并：`ai-key` 是真实 Provider 配置来源，Totemora 用来补充哪些 Agent 正在使用该模型。`qwen` 会归一为 `dashscope`。只有模型 ID 完全一致时才复用 `ai-key` 的连接配置，不会把名字相似的模型猜测映射到其他端点。使用 `api_key_env` 的 Totemora-only Provider 可通过 `EYES_TOTEMORA_ENV_FILE_HOST` 指向的只读 env 文件向资产探针注入同名变量，否则页面显示“未配置 Key”。
 
 ## Context7 账号池
 
@@ -73,6 +97,16 @@ curl -fsS http://127.0.0.1:9092/api/health
 
 不要把真实 Key 或 Token 写入仓库。`.env` 只保存 Secret 文件路径；后续可进一步切换为 Secret Manager。
 
+首次配置完成后，建议按这个顺序验收：
+
+1. 登录 `/assets`，确认模型和 Context7 页面都能加载。
+2. 检查每个模型的状态是否符合实际账号情况。
+3. 确认 Context7 卡片只显示标签和额度，不显示 Key。
+4. 使用错误 Bearer Token 调用 MCP，确认返回 `401`。
+5. 使用正确 Token 列出工具，再执行一次真实文档查询。
+
+当前仓库没有附带真实 Context7 账号；真实账号验收需要部署者在本机填写 Secret 后完成。
+
 ## Agent 接入
 
 MCP URL：
@@ -100,3 +134,4 @@ MCP 暴露两个工具：
 - Model Provider 只探测当前配置的 OpenAI Chat/Responses 与 Anthropic Messages 兼容接口。
 - Context7 没有公开的“读取所有套餐使用量且不消耗请求”的 API；额度卡片以实际 API 响应头为准。
 - Context7 API Key 的服务条款和账号使用规则仍由操作者负责；账号池不绕过单账号限制，只在合法拥有的账号间做路由。
+- 自动化测试已覆盖账号轮询、失败切换、额度恢复、缓存与 MCP 协议；真实账号的端到端结果仍取决于部署者的账号、套餐和上游服务状态。
