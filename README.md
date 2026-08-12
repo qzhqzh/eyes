@@ -1,197 +1,185 @@
-# eyes — 服务健康检查工具
+# Eyes — 看见并连接你的机器资源
 
-一行命令检查本机所有服务是否正常运行。支持邮件告警和每日报告。
+Eyes 是一个面向个人机房、小团队和边缘设备的自托管控制台。它把散落在家里、办公室、云服务器、旁路由、PVE 和 NAS 上的机器整理成一个可查看、可连接的资源网络，让人和 AI Agent 都能更快理解：**有哪些节点、它们是否在线、能提供什么能力，以及哪些服务可以使用。**
 
-**特性：**
-- 支持 Docker 容器、Systemd 服务、HTTP 端点、端口监听、自定义命令
-- **Nginx 自动发现**：从 nginx 配置自动识别子域名服务，无需手动维护
-- 邮件告警（SMTP）和每日报告
-- 终端彩色输出、JSON 输出、实时刷新
+项目从单机服务健康检查工具发展而来，目前已经具备 Hub 控制台、无界面 Node Agent、Fleet 资源汇总、域名探测和 AI 服务资产目录。调度、资源租约与受控执行仍在继续建设中。
 
-## 快速开始
+## 你可以用 Eyes 做什么
+
+- **看服务是否正常**：检查 Hub 本机可见的 Docker、Systemd、Cron、HTTP、端口、WireGuard、NAS 和资源状态。
+- **管理多台机器**：Linux、OpenWrt 等节点以后台服务主动连接 Hub，无需对外开放 Agent 端口。
+- **查看全网资源**：在 Fleet 页面查看节点在线状态、CPU、内存、磁盘、角色和已声明能力。
+- **检查代理域名**：从网关配置发现域名，并区分可达、HTTP 异常和连接失败。
+- **整理 AI 资产**：汇总 `ai-key` 与 Totemora 中的模型关系，查看脱敏后的配置和连通状态。
+- **给 Agent 提供工具**：通过带 Bearer 鉴权的 MCP 入口向受信任 Agent 提供 Context7 文档查询。
+
+登录 Hub 后，主要页面如下：
+
+| 页面 | 地址 | 你能看到什么 |
+| --- | --- | --- |
+| 服务状态 | `/` | Hub 本机可见的服务、网络和资源健康状态 |
+| Fleet 节点 | `/fleet` | 所有已注册节点的联通性、资源与能力 |
+| 域名管理 | `/domains` | 反向代理域名及实时可达状态 |
+| 资产管理 | `/assets` | 模型目录、Context7 账号状态和 Agent 接入信息 |
+
+> “服务状态”只代表 Hub 本机的检查结果，不是整个 Fleet 的健康汇总；全网节点请以 Fleet 页面为准。详见[观测作用域与统计口径](docs/observability-scopes.md)。
+
+## 它是怎样连接起来的
+
+```mermaid
+flowchart LR
+    Owner["你 / 运维人员"] --> Web["Eyes Hub 控制台"]
+    Node1["Linux / PVE 节点 Agent"] -->|"主动上报"| Hub["Eyes Hub"]
+    Node2["OpenWrt 节点 Agent"] -->|"主动上报"| Hub
+    Hub --> Web
+    Consumer["AI Agent"] -->|"受控 API / MCP"| Hub
+    Hub --> Probe["本机资产 Probe"]
+```
+
+- **Hub** 保存节点目录、最新状态和资源快照，并提供 Web、API 和 MCP 入口。
+- **Node Agent** 以无界面的系统服务运行，主动向 Hub 注册和上报；Hub 暂时不可用不会影响节点原有业务。
+- **Asset Probe** 只在 Hub 本机读取模型和 Context7 凭据，只向页面返回脱敏状态。
+- **Consumer Agent** 通过统一入口使用被授权的能力，不需要知道节点密码、SSH Key 或 Docker Socket。
+
+## 快速启动 Hub
+
+需要 Docker 和 Docker Compose。先复制配置并替换所有 `replace-with-*` 占位值：
 
 ```bash
-# 1. 安装依赖
-pip install pyyaml
+cp .env.example .env
 
-# 2. 复制配置文件
+# EYES_SECRET_KEY 建议使用 32 位以上随机值
+# EYES_WEB_PASSWORD 是登录控制台的密码，至少 12 位
+# EYES_HUB_ENROLL_TOKEN 用于新节点首次注册，至少 24 位
+
+mkdir -p data
+if [ ! -e eyes.db ]; then
+  install -m 600 /dev/null eyes.db
+fi
+
+docker compose up -d --build
+docker compose ps
+```
+
+默认访问地址是：
+
+```text
+http://<Hub-IP>:8090/login
+```
+
+登录密码来自 `.env` 中的 `EYES_WEB_PASSWORD`。如果设置了其他 `EYES_PORT`，请把地址中的 `8090` 换成实际端口，例如设置 `EYES_PORT=18090` 时访问 `http://<Hub-IP>:18090/login`。
+
+### 已有数据库升级
+
+Compose 会把仓库根目录的 `eyes.db` 挂载为 Hub 数据库。已有数据升级前先备份；全新安装在上一步已经创建空文件，可跳过：
+
+```bash
+if [ -f eyes.db ]; then
+  cp eyes.db eyes.db.pre-fleet-backup
+fi
+```
+
+不要删除已有的 `eyes.db`、`data/` 或 Docker volume。
+
+## 接入第一台节点
+
+### Linux
+
+在节点上运行 Agent 做一次连通验证：
+
+```bash
+python3 agent/eyes-agent.py \
+  --mode node \
+  --hub-url https://<Hub地址> \
+  --enroll-token "$EYES_HUB_ENROLL_TOKEN" \
+  --state-dir ./data/agent-state \
+  --once
+```
+
+验证成功后，可执行 `sudo sh agent/install.sh` 安装 systemd 服务，再编辑 `/etc/eyes/agent.env`。首次注册会保存节点自己的 `node_id` 和凭据，以后不再需要 enrollment token。
+
+### OpenWrt
+
+OpenWrt 25+ 节点先安装 Python 3，再执行：
+
+```bash
+sh agent/install-openwrt.sh
+```
+
+安装器使用原生 procd 管理进程，不依赖 systemd 或 Docker。首次注册成功后，应从 `/etc/eyes/agent.env` 删除 `EYES_ENROLL_TOKEN`。
+
+远程节点默认只向 HTTPS Hub 发送凭据。`http://127.0.0.1` 和 `http://localhost` 只适合本机开发；受控测试网络暂时没有 TLS 时，需显式添加 `--allow-insecure-http`。
+
+接入后登录 `/fleet`：节点应先显示为 `online`，并逐步出现 Inventory、Resources 和 Capability 信息。离线节点会保留最后一次快照，但不会继续计入在线资源总量。
+
+## 使用资产管理和 Agent MCP
+
+进入 `/assets` 可以查看：
+
+- `ai-key` 中已配置的模型 Provider；
+- Totemora Agent 与模型的使用关系；
+- 模型是否已配置、鉴权失败、额度不足或连通正常；
+- Context7 账号的可用状态与上游返回的额度信息。
+
+模型 Key、Context7 Key 和 MCP Token 不会显示在页面，也不应写入仓库。生产环境优先把它们放在权限为 `0600` 的只读 Secret 文件中。
+
+配置 Context7 账号后，受信任 Agent 可连接：
+
+```text
+POST http://<Hub-IP>:<Hub端口>/mcp/context7
+Authorization: Bearer <独立的 asset-api-token>
+```
+
+该入口提供 `resolve-library-id` 和 `query-docs`。Context7 属于可选能力：未配置账号时，Hub 和其他页面仍可正常运行；当前真实账号的最终验收由部署者填写本机 Secret 后进行。完整配置见[资产管理与 Agent 服务聚合](docs/asset-management.md)。
+
+## 宿主机服务扫描
+
+默认 Compose 使用项目约定的 `star` 目录布局，并挂载 Gateway 配置、NAS、`ai-key` 和 Totemora 配置。目录不同的机器应先在 `.env` 中覆盖对应的 `*_HOST` 路径。需要额外扫描宿主机 Docker 时，再检查 `docker-compose.host.example.yml` 中的示例路径，并作为 Compose override 启动：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.host.example.yml up -d --build
+```
+
+Docker Socket 等同高权限入口，只应挂载到可信 Hub。资源、WireGuard 和网速卡片会按页面设置的周期读取最新状态；Hub 后台服务扫描默认关闭，启用 `EYES_ENABLE_SCHEDULED_CHECKS=1` 后，Docker、Systemd、Cron 等检查才会按各自周期自动执行。若宿主机已经使用 `cron_check.py` 或 `check.py --alert`，应保持该开关关闭，避免重复检查和重复告警。
+
+## 单机命令行模式
+
+不需要 Hub 时，仍可把 Eyes 当作轻量健康检查脚本使用：
+
+```bash
+pip install pyyaml
 cp config.example.yaml config.yaml
 
-# 3. 编辑配置，填入你的邮箱和 SMTP 信息
-vim config.yaml
-
-# 4. 运行检查
-python3 check.py
-```
-
-## 目录结构
-
-```
-eyes/
-├── check.py                主脚本
-├── config.example.yaml     配置模板（可提交到公开仓库）
-├── config.yaml             实际配置（含密码，已 gitignore）
-├── .gitignore              Git 忽略规则
-└── conf.d/                 服务列表（按分类存放）
-    ├── docker.yaml         Docker 容器（手动管理）
-    ├── http.yaml           HTTP 端点（手动管理）
-    ├── systemd.yaml        Systemd 服务
-    ├── port.yaml           端口监听
-    ├── command.yaml        自定义命令
-    ├── _nginx_docker.yaml  Nginx 自动发现（由 --sync 生成）
-    └── _nginx_http.yaml    Nginx 自动发现（由 --sync 生成）
-```
-
-## 用法
-
-```bash
 python3 check.py              # 终端检查
 python3 check.py --json       # JSON 输出
 python3 check.py --watch 10   # 每 10 秒刷新
 python3 check.py --quiet      # 只显示失败项
 python3 check.py --alert      # 有失败才发邮件
 python3 check.py --report     # 始终发邮件报告
-
-# Nginx 自动发现（推荐）
-python3 check.py --sync             # 同步 nginx 路由 + 终端检查
-python3 check.py --sync --alert     # 同步 + 异常发邮件
-python3 check.py --sync --report    # 同步 + 每日报告
+python3 check.py --sync       # 从 Nginx 配置同步服务后检查
 ```
 
-## Nginx 自动发现
+手动服务定义位于 `conf.d/`；Nginx 自动发现会生成 `_nginx_docker.yaml` 和 `_nginx_http.yaml`。命令退出码为 `0` 表示全部通过，`1` 表示至少一项失败。
 
-如果你使用 nginx 反向代理，`--sync` 会自动：
+## 当前边界
 
-1. 扫描 `nginx/conf.d/*.conf` 文件
-2. 解析 `server_name` → `proxy_pass` 端口映射
-3. 找到每个端口对应的 Docker 容器
-4. 自动生成 `_nginx_docker.yaml` 和 `_nginx_http.yaml`
-5. 移除已下线服务的监控条目
+Eyes 已经能完成“发现、描述和观察”，但还没有把所有资源直接交给 Agent 执行：
 
-**使用方式：**
+- Workload、ResourceClaim、Lease 和命令通道目前只有控制面骨架，节点不会执行 Hub 下发的命令。
+- 受控远程 shell 是规划中的独立高权限维护能力，当前版本没有新增远程 shell 入口。
+- Hub 还不是通用模型代理网关；当前 MCP 只聚合 Context7 文档查询。
+- 公网使用前需要 HTTPS、访问审计和更完整的节点身份机制。
 
-```bash
-# 设置 nginx 配置目录（默认 /etc/nginx/conf.d）
-python3 check.py --sync --nginx-conf-dir /path/to/nginx/conf.d
-```
+准确的已实现范围与下一步计划见[实现状态](docs/implementation-status.md)和[演进路线](docs/roadmap.md)。
 
-**工作流：**
-- 新增服务：添加 nginx conf → 下次 `--sync` 自动发现
-- 移除服务：删除 nginx conf → 下次 `--sync` 自动排除
-- 手动服务：在 `docker.yaml` / `http.yaml` 中维护
+## 进一步阅读
 
-## 增删服务
-
-### 手动添加
-
-直接编辑 `conf.d/` 下对应文件：
-
-```bash
-# 加一个 Docker 容器
-echo '- { name: "新服务", target: my-container-1 }' >> conf.d/docker.yaml
-
-# 删一个：注释掉或删掉那一行
-# - { name: "旧服务", target: old-container }
-
-# 加一个新分类：新建 conf.d/xxx.yaml
-```
-
-### 自动发现（推荐）
-
-使用 nginx 反向代理的服务无需手动添加：
-
-```bash
-# 1. 添加 nginx 配置
-cat > /etc/nginx/conf.d/my-service.conf << 'EOF'
-server {
-    listen 80;
-    server_name my-service.example.com;
-    location / {
-        proxy_pass http://127.0.0.1:8080;
-    }
-}
-EOF
-
-# 2. 重新加载 nginx
-nginx -s reload
-
-# 3. 运行同步（自动发现新服务）
-python3 check.py --sync
-```
-
-## 定时任务
-
-```bash
-# 每小时整点检查（自动同步 nginx + 异常发邮件）
-0 * * * * cd /path/to/eyes && python3 check.py --sync --alert >> /var/log/eyes.log 2>&1
-
-# 每天 9:00 发完整报告
-0 9 * * * cd /path/to/eyes && python3 check.py --sync --report >> /var/log/eyes.log 2>&1
-```
-
-## 退出码
-
-- `0` — 全部通过
-- `1` — 有失败项
-
-## 环境变量（可选）
-
-可以通过环境变量覆盖配置：
-
-```bash
-export EYES_EMAIL_FROM="alert@example.com"
-export EYES_EMAIL_TO="admin@example.com"
-export EYES_SMTP_HOST="smtp.example.com"
-export EYES_SMTP_PASSWORD="your_password"
-
-python3 check.py
-```
+- [文档导航](docs/README.md)
+- [产品愿景与边界](docs/product-vision.md)
+- [总体架构](docs/architecture.md)
+- [安全设计](docs/security.md)
+- [Hub-Agent 协议](docs/protocol.md)
 
 ## License
 
 MIT
-
-## 项目设计文档
-
-Eyes 正在从单机健康检查工具演进为面向 AI Agent 的多节点资源网络。项目愿景、目标架构、资源模型、通信协议、安全边界和实施路线见 [docs/README.md](docs/README.md)。
-
-## 多节点架构预览
-
-当前已具备节点注册、主动心跳、inventory/resources 快照和命令通道骨架。开发环境可这样验证：
-
-```bash
-# Hub：复制配置后替换全部 replace-with-* 占位值，.env 已被 Git 忽略；
-# 应用会拒绝使用示例占位值启动。
-cp .env.example .env
-
-# 从旧版根目录 eyes.db 升级时自动保留备份；全新安装不会执行复制。
-mkdir -p data
-if [ -f eyes.db ] && [ ! -e data/eyes.db ]; then
-  cp eyes.db eyes.db.pre-fleet-backup
-  install -m 600 eyes.db data/eyes.db
-fi
-
-docker compose up -d --build
-
-# Node：首次运行保存 node_id 和 Hub 凭据，后续无需 enroll-token
-python3 agent/eyes-agent.py \
-  --mode node \
-  --hub-url http://127.0.0.1:8090 \
-  --enroll-token "$EYES_HUB_ENROLL_TOKEN" \
-  --state-dir ./data/agent-state \
-  --once
-```
-
-登录 `http://<hub-ip>:8090/` 查看 Hub 本机健康检查，进入 `http://<hub-ip>:8090/fleet` 查看全部节点的联通状态、在线资源汇总和结构化节点详情。两者的统计口径不同，详见 [观测作用域与统计口径](docs/observability-scopes.md)。管理密码来自 `.env` 的 `EYES_WEB_PASSWORD`。
-
-进入 `http://<hub-ip>:8090/assets` 可查看模型与 Context7 资产。模型凭据只由 loopback 资产探针读取；配置多个 Context7 账号和 Agent MCP Token 的方法见 [资产管理与 Agent 服务聚合](docs/asset-management.md)。
-
-远程节点默认只连接 HTTPS Hub；`http://127.0.0.1`、`http://localhost` 仅用于本机开发。受控测试网络若暂时没有 TLS，可显式添加 `--allow-insecure-http`。
-
-Linux 节点可执行 `sudo sh agent/install.sh` 安装 systemd 单元和配置模板，然后编辑 `/etc/eyes/agent.env`。
-
-OpenWrt 25+ 节点先安装 Python 3，再执行 `sh agent/install-openwrt.sh`。该安装器使用原生 procd 管理进程，不依赖 systemd 或 Docker；首次注册成功后应从 `/etc/eyes/agent.env` 删除 `EYES_ENROLL_TOKEN`。
-
-基础 Compose 不挂载 Docker Socket、Nginx 和 NAS，确保新机器可直接启动。需要旧版本机扫描能力时，先检查并修改 `docker-compose.host.example.yml` 的宿主机路径，再以 Compose override 启动；Docker Socket 等同高权限入口，不应在不可信 Hub 上启用。
-
-当前环境变量 Token 是第一阶段 bootstrap 机制，适合受控网络验证；一次性 Token、mTLS、调度器和执行器仍在后续阶段。已实现边界见 [docs/implementation-status.md](docs/implementation-status.md)。

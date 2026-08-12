@@ -1,6 +1,6 @@
 # 实现状态
 
-本文区分当前代码与目标设计。更新时间：2026-07-30。
+本文区分当前代码与目标设计。更新时间：2026-08-12。
 
 ## 已实现
 
@@ -45,6 +45,13 @@
 - 节点列表根据最后心跳派生 `online/stale/offline/unknown`，不会把离线节点的旧快照计入在线资源容量。
 - 旧版 Hub 本机健康检查可通过 `EYES_ENABLE_SCHEDULED_CHECKS=1` 由后台按 `check_interval` 周期运行，统计口径与 Fleet 明确分离；已有外部 cron 时默认关闭以避免重复告警。
 
+### 用户控制台
+
+- 登录后通过统一侧边栏访问服务状态、Fleet 节点、域名管理和资产管理。
+- 服务状态页面按组局部更新；资源默认 5 分钟，WireGuard 默认 1 分钟，Docker 与网速默认 10 分钟，Systemd/Cron 默认 30 分钟。资源、WireGuard 和网速可直接调整读取周期；启用后台定时检查后，服务组也可按卡片调整实际扫描周期。
+- 手动“扫描服务”带 1 分钟冷却，并依次刷新资源与服务组，避免连续点击触发重叠扫描。
+- `/domains` 从 Gateway Nginx 配置发现代理域名，并区分可达、HTTP 异常（包含 404）和连接失败。
+
 ### Agent 资产聚合
 
 - `/assets` 汇总 `ai-key` 模型 Provider 与 Totemora Agent/模型使用关系，并显示脱敏后的连接状态。
@@ -52,6 +59,7 @@
 - 模型连通检查使用最大输出 1 token 的最小调用并缓存 5 分钟。
 - 多个 Context7 账号支持轮询、鉴权/额度失败切换、额度重置恢复和 6 小时文档查询缓存。
 - `/mcp/context7` 以独立 Bearer Token 暴露 `resolve-library-id` 与 `query-docs`，供受控网络内的 Agent 使用。
+- MCP 入口支持 `2025-03-26` 与无会话 `2026-07-28`，并限制来源频率、请求大小、参数长度、上游响应和浏览器 Origin。
 
 ### 验证
 
@@ -59,6 +67,7 @@
 - NodeStateStore、HubClient 和退避测试。
 - 真实 Agent 子进程到临时 Flask Hub 的注册、心跳、双快照和命令拉取测试。
 - Flask 完整应用加载和 `/api/v1` 路由烟测。
+- 资产管理测试覆盖模型聚合、Secret 文件、Context7 故障切换、恢复、缓存边界和两代 MCP 协议；真实 Context7 账号验收暂由部署者配置本机 Secret 后完成。
 
 ## 仅有骨架，尚未完成
 
@@ -76,7 +85,7 @@
 - Agent 在发起注册前持久生成节点凭据，同一凭据可幂等重放，避免响应丢失导致永久冲突。
 - 节点凭据当前是 Bearer Token，尚未升级为短期证书和 mTLS。
 - Agent 默认拒绝向非本机明文 HTTP Hub 发送注册或节点凭据；远程生产连接要求 HTTPS。
-- Compose 将数据库持久化到 `data/eyes.db`；旧版根目录数据库升级前必须按 README 备份并迁移。
+- Compose 将仓库根目录的 `eyes.db` 挂载到容器内 `/app/data/eyes.db`；已有数据库升级前必须按 README 备份。
 - Agent 自报 roles/labels 尚未经过管理员审批，调度器落地前必须区分声明值与批准值。
 - Workload executor、MaintenanceAction 和 ShellSession 均未启用，因此当前没有新增远程执行入口。
 - 资产探针信任 Hub 宿主机的 loopback 访问；对外 MCP 必须设置独立 `EYES_ASSET_API_TOKEN`，公网使用前仍需 HTTPS、网关限流和审计。
