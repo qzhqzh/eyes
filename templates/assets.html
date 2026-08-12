@@ -150,7 +150,8 @@ function renderContext7(accounts, mcpEnabled) {
             const percent = knownQuota ? Math.max(0, Math.min(100, account.remaining / account.limit * 100)) : 0;
             const remaining = account.remaining == null ? '未知' : account.remaining;
             const total = account.limit == null ? '未返回总额' : `共 ${account.limit}`;
-            const reset = account.reset_at ? new Date(account.reset_at * 1000).toLocaleString('zh-CN', {hour12:false}) : '重置时间未知';
+            const retryAt = account.reset_at || (account.retry_after_seconds != null ? account.retry_at : null);
+            const reset = retryAt ? `预计恢复 ${new Date(retryAt * 1000).toLocaleString('zh-CN', {hour12:false})}` : '重置时间未知';
             return `<article class="e-card"><div class="e-card-body">
                 <div class="flex items-center justify-between gap-2"><strong style="color:var(--eyes-text-primary);">${escapeAssetText(account.label)}</strong>${stateMarkup(account.state, context7States)}</div>
                 <div style="margin-top:var(--eyes-spacing);"><span class="quota-number">${remaining}</span><span class="asset-meta"> 次剩余 · ${total}</span></div>

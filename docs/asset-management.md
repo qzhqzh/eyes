@@ -46,7 +46,7 @@ work=ctx7sk_yyy
 
 每个标签和 Key 必须唯一。请求按账号轮询；遇到 `401`、`403` 或 `429` 时自动切换到下一个账号。额度重置后，账号会重新进入候选池。成功的相同文档查询缓存 6 小时，最多保存 128 项，以减少重复消耗。
 
-页面显示 `RateLimit-Limit`、`RateLimit-Remaining` 和 `RateLimit-Reset` 响应头。Context7 官方文档说明这些头用于描述当前限额、剩余请求和 Unix 重置时间；如果某次响应没有返回它们，页面会明确显示“未知”，不会估算额度。官方的完整月度/日度使用量目前只能在 Dashboard 查看：
+页面显示 `RateLimit-Limit`、`RateLimit-Remaining` 和 `RateLimit-Reset` 响应头。Context7 官方文档说明这些头用于描述当前限额、剩余请求和 Unix 重置时间；429 只有 `Retry-After` 时，页面会据此显示预计恢复时间并在到期后恢复该账号。如果这些头均未返回，页面会明确显示“未知”，不会估算额度；服务内部仅做 60 秒防抖，随后重新尝试该账号。官方的完整月度/日度使用量目前只能在 Dashboard 查看：
 
 - [Context7 API Guide](https://context7.com/docs/api-guide)
 - [Context7 Usage Dashboard](https://context7.com/docs/howto/usage)
@@ -92,7 +92,7 @@ MCP 暴露两个工具：
 - `resolve-library-id`：调用 Context7 Library Search。
 - `query-docs`：按 Library ID 查询最新文档片段。
 
-当前入口是无会话的 Streamable HTTP JSON-RPC 子集，协商版本为 `2025-03-26`，支持 `initialize`、`notifications/initialized`、`tools/list` 和 `tools/call`。服务端默认按来源 IP 限制为每分钟 30 次，并限制请求体、参数和上游响应大小；相同文档查询命中缓存时不消耗账号额度。带浏览器 `Origin` 的请求默认拒绝，确需 Web 客户端时通过 `EYES_ASSET_MCP_ALLOWED_ORIGINS` 显式列出来源。公网暴露前仍应在网关补 HTTPS 和访问审计。
+当前入口同时支持两代无会话 Streamable HTTP：旧客户端可协商 `2025-03-26`，使用 `initialize`、`notifications/initialized`、`tools/list` 和 `tools/call`；现代客户端可使用 `2026-07-28`，通过 `server/discover` 或直接发送带请求级 `_meta` 的 `tools/list` / `tools/call`。现代请求必须同时携带匹配的 `MCP-Protocol-Version`、`Mcp-Method`，调用工具时还必须携带 `Mcp-Name`。服务端默认按来源 IP 限制为每分钟 30 次，并限制请求体、参数和上游响应大小；相同文档查询命中缓存时不消耗账号额度。带浏览器 `Origin` 的请求默认拒绝，确需 Web 客户端时通过 `EYES_ASSET_MCP_ALLOWED_ORIGINS` 显式列出来源。公网暴露前仍应在网关补 HTTPS 和访问审计。
 
 ## 当前限制
 

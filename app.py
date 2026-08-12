@@ -97,7 +97,15 @@ app.register_blueprint(hub_api)
 CONF_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "conf.d")
 GATEWAY_CONFIG_DIR = os.environ.get("EYES_GATEWAY_CONFIG_DIR", "/gateway/nginx/conf.d")
 ASSET_PROBE_URL = os.environ.get("EYES_ASSET_PROBE_URL", "http://127.0.0.1:9092")
-SUPPORTED_MCP_PROTOCOL_VERSION = "2025-03-26"
+LEGACY_MCP_PROTOCOL_VERSION = "2025-03-26"
+MODERN_MCP_PROTOCOL_VERSION = "2026-07-28"
+SUPPORTED_MCP_PROTOCOL_VERSION = LEGACY_MCP_PROTOCOL_VERSION
+MCP_SERVER_INFO = {"name": "eyes-context7-pool", "version": "0.2.0"}
+MCP_INSTRUCTIONS = (
+    "Use resolve-library-id before query-docs unless the user already supplied "
+    "an exact Context7 library ID. Eyes routes requests across the configured "
+    "Context7 account pool. Never include credentials or proprietary code in queries."
+)
 
 
 def _bounded_env_int(name, default, minimum, maximum):
@@ -469,12 +477,78 @@ def asset_context7():
         return jsonify({"error": str(exc)}), 503
 
 
-def _mcp_error(request_id, code, message):
+def _mcp_error(request_id, code, message, data=None):
+    error = {"code": code, "message": message}
+    if data is not None:
+        error["data"] = data
     return jsonify({
         "jsonrpc": "2.0",
         "id": request_id,
-        "error": {"code": code, "message": message},
+        "error": error,
     })
+
+
+def _modern_mcp_result(request_id, result):
+    result = {
+        "resultType": "complete",
+        **result,
+        "_meta": {"io.modelcontextprotocol/serverInfo": MCP_SERVER_INFO},
+    }
+    return jsonify({"jsonrpc": "2.0", "id": request_id, "result": result})
+
+
+def _validate_modern_mcp_request(payload):
+    """Validate the self-describing HTTP envelope required by MCP 2026-07-28."""
+    request_id = payload.get("id")
+    method = payload.get("method")
+    params = payload.get("params")
+    meta = params.get("_meta") if isinstance(params, dict) else None
+    protocol_version = request.headers.get("MCP-Protocol-Version")
+    if not isinstance(meta, dict):
+        return _mcp_error(
+            request_id, -32020, "missing MCP 2026 request metadata"
+        ), 400
+    body_protocol_version = meta.get("io.modelcontextprotocol/protocolVersion")
+    if body_protocol_version != protocol_version:
+        return _mcp_error(
+            request_id, -32020, "MCP protocol metadata does not match header"
+        ), 400
+    if body_protocol_version != MODERN_MCP_PROTOCOL_VERSION:
+        return _mcp_error(
+            request_id,
+            -32022,
+            "unsupported MCP protocol version",
+            {
+                "supported": [MODERN_MCP_PROTOCOL_VERSION],
+                "requested": body_protocol_version or "",
+            },
+        ), 400
+    if not isinstance(
+        meta.get("io.modelcontextprotocol/clientCapabilities"), dict
+    ):
+        return _mcp_error(
+            request_id, -32602, "invalid MCP client capabilities"
+        ), 400
+    client_info = meta.get("io.modelcontextprotocol/clientInfo")
+    if client_info is not None and (
+        not isinstance(client_info, dict)
+        or not isinstance(client_info.get("name"), str)
+        or not client_info.get("name")
+        or not isinstance(client_info.get("version"), str)
+        or not client_info.get("version")
+    ):
+        return _mcp_error(request_id, -32602, "invalid MCP client info"), 400
+    if request.headers.get("Mcp-Method") != method:
+        return _mcp_error(
+            request_id, -32020, "Mcp-Method header does not match request"
+        ), 400
+    if method == "tools/call":
+        tool_name = params.get("name")
+        if not isinstance(tool_name, str) or request.headers.get("Mcp-Name") != tool_name:
+            return _mcp_error(
+                request_id, -32020, "Mcp-Name header does not match request"
+            ), 400
+    return None
 
 
 def _asset_mcp_rate_allowed(client_key):
@@ -570,15 +644,47 @@ def context7_mcp():
         return _mcp_error(None, -32600, "invalid MCP request size"), 413
     try:
         payload = json.loads(raw_payload)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
         payload = None
     if not isinstance(payload, dict) or payload.get("jsonrpc") != "2.0":
         return _mcp_error(None, -32600, "invalid JSON-RPC request"), 400
     request_id = payload.get("id")
     method = payload.get("method")
     protocol_version = request.headers.get("MCP-Protocol-Version")
+    params = payload.get("params")
+    meta = params.get("_meta") if isinstance(params, dict) else None
+    body_protocol_version = (
+        meta.get("io.modelcontextprotocol/protocolVersion")
+        if isinstance(meta, dict)
+        else None
+    )
+    modern_request = (
+        method == "server/discover"
+        or protocol_version == MODERN_MCP_PROTOCOL_VERSION
+        or body_protocol_version is not None
+    )
+    if modern_request:
+        validation_error = _validate_modern_mcp_request(payload)
+        if validation_error is not None:
+            return validation_error
+        if method in {"initialize", "notifications/initialized"}:
+            return _mcp_error(request_id, -32601, "method not found"), 404
+    if method != "initialize" and protocol_version and protocol_version not in {
+        LEGACY_MCP_PROTOCOL_VERSION,
+        MODERN_MCP_PROTOCOL_VERSION,
+    }:
+        return _mcp_error(
+            request_id,
+            -32022,
+            "unsupported MCP protocol version",
+            {
+                "supported": [MODERN_MCP_PROTOCOL_VERSION],
+                "requested": protocol_version,
+            },
+        ), 400
     if (
-        method != "initialize"
+        not modern_request
+        and method != "initialize"
         and protocol_version
         and protocol_version != SUPPORTED_MCP_PROTOCOL_VERSION
     ):
@@ -594,18 +700,27 @@ def context7_mcp():
             "result": {
                 "protocolVersion": SUPPORTED_MCP_PROTOCOL_VERSION,
                 "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "eyes-context7-pool", "version": "0.1.0"},
-                "instructions": "Context7 documentation tools use a pooled account quota managed by Eyes.",
+                "serverInfo": MCP_SERVER_INFO,
+                "instructions": MCP_INSTRUCTIONS,
             },
         })
-    if method == "tools/list":
-        return jsonify({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "result": {"tools": _context7_mcp_tools()},
+    if method == "server/discover":
+        return _modern_mcp_result(request_id, {
+            "supportedVersions": [MODERN_MCP_PROTOCOL_VERSION],
+            "capabilities": {"tools": {"listChanged": False}},
+            "instructions": MCP_INSTRUCTIONS,
+            "ttlMs": 300000,
+            "cacheScope": "private",
         })
+    if method == "tools/list":
+        result = {"tools": _context7_mcp_tools()}
+        if modern_request:
+            result.update({"ttlMs": 300000, "cacheScope": "private"})
+            return _modern_mcp_result(request_id, result)
+        return jsonify({"jsonrpc": "2.0", "id": request_id, "result": result})
     if method != "tools/call":
-        return _mcp_error(request_id, -32601, "method not found")
+        response = _mcp_error(request_id, -32601, "method not found")
+        return (response, 404) if modern_request else response
 
     params = payload.get("params") or {}
     if not isinstance(params, dict):
@@ -653,6 +768,8 @@ def context7_mcp():
     }
     if isinstance(body, dict):
         tool_result["structuredContent"] = body
+    if modern_request:
+        return _modern_mcp_result(request_id, tool_result)
     return jsonify({"jsonrpc": "2.0", "id": request_id, "result": tool_result})
 
 
