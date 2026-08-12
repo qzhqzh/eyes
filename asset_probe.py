@@ -51,8 +51,14 @@ class AssetProbeHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "invalid request size"}, status=413)
                 return
             payload = json.loads(self.rfile.read(length) or b"{}")
+            if not isinstance(payload, dict):
+                raise ValueError("request body must be a JSON object")
+            path = payload.get("path")
+            params = payload.get("params", {})
+            if not isinstance(path, str) or not isinstance(params, dict):
+                raise ValueError("path must be a string and params must be an object")
             result = pooled_context7_request(
-                payload.get("path", ""), payload.get("params") or {}
+                path, params
             )
             try:
                 body = json.loads(result["body"].decode("utf-8"))
@@ -68,7 +74,7 @@ class AssetProbeHandler(BaseHTTPRequestHandler):
             self.send_json(
                 {"error": str(exc), "status_code": exc.status_code}, status=503
             )
-        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        except (ValueError, TypeError, json.JSONDecodeError, RecursionError) as exc:
             self.send_json({"error": str(exc)}, status=400)
 
     def send_json(self, data, status=200):

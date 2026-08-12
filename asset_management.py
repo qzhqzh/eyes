@@ -2,6 +2,7 @@
 """Aggregate model providers and pooled Context7 accounts without exposing keys."""
 
 import configparser
+import hashlib
 import ipaddress
 import json
 import os
@@ -23,6 +24,8 @@ CONTEXT7_CACHE_SECONDS = 300
 CONTEXT7_REFRESH_COOLDOWN_SECONDS = 30
 CONTEXT7_QUERY_CACHE_SECONDS = 21600
 CONTEXT7_QUERY_CACHE_MAX_ITEMS = 128
+CONTEXT7_QUERY_CACHE_MAX_BYTES = 32 * 1024 * 1024
+CONTEXT7_POOL_DEADLINE_SECONDS = 40
 MAX_UPSTREAM_RESPONSE_BYTES = 4 * 1024 * 1024
 CONTEXT7_API_BASE = "https://context7.com"
 PROVIDER_ALIASES = {"qwen": "dashscope"}
@@ -37,6 +40,7 @@ _context7_cache = {"at": 0.0, "items": []}
 _context7_query_cache = {}
 _context7_runtime = {}
 _context7_cursor = 0
+_context7_account_generation = ()
 _cache_lock = threading.Lock()
 _context7_refresh_lock = threading.Lock()
 
@@ -323,28 +327,132 @@ def _header_int(headers, name):
         return None
 
 
+def _context7_generation(accounts):
+    """Identify account configuration changes without retaining raw keys."""
+    return tuple(
+        (
+            account["label"],
+            hashlib.sha256(account["_api_key"].encode()).hexdigest(),
+        )
+        for account in accounts
+    )
+
+
+def _sync_context7_accounts(accounts):
+    """Invalidate state and cached responses whenever the account set changes."""
+    global _context7_account_generation
+    generation = _context7_generation(accounts)
+    with _cache_lock:
+        if generation == _context7_account_generation:
+            return generation
+        _context7_account_generation = generation
+        _context7_runtime.clear()
+        _context7_query_cache.clear()
+        _context7_cache.update({"at": 0.0, "items": []})
+    return generation
+
+
+def _cache_context7_result(query_key, result, generation=None):
+    body_size = len(result.get("body", b""))
+    if body_size > CONTEXT7_QUERY_CACHE_MAX_BYTES:
+        return
+    with _cache_lock:
+        if (
+            generation is not None
+            and generation != _context7_account_generation
+        ):
+            return
+        total_bytes = sum(
+            len(item["result"].get("body", b""))
+            for item in _context7_query_cache.values()
+        )
+        while _context7_query_cache and (
+            len(_context7_query_cache) >= CONTEXT7_QUERY_CACHE_MAX_ITEMS
+            or total_bytes + body_size > CONTEXT7_QUERY_CACHE_MAX_BYTES
+        ):
+            oldest_key = min(
+                _context7_query_cache,
+                key=lambda key: _context7_query_cache[key]["at"],
+            )
+            removed = _context7_query_cache.pop(oldest_key)
+            total_bytes -= len(removed["result"].get("body", b""))
+        _context7_query_cache[query_key] = {
+            "at": time.monotonic(),
+            "result": result,
+        }
+
+
 def _context7_state(label, status_code, headers, latency_ms):
+    remaining = _header_int(headers, "RateLimit-Remaining")
+    reset_at = _header_int(headers, "RateLimit-Reset")
+    retry_after_seconds = _header_int(headers, "Retry-After")
     state = "healthy"
-    if status_code == 429:
-        state = "quota_exhausted"
-    elif status_code in {401, 403}:
+    if status_code in {401, 403}:
         state = "auth_error"
     elif status_code >= 500:
         state = "service_error"
+    elif status_code == 429 or remaining == 0:
+        state = "quota_exhausted"
+    retry_at = None
+    if state == "quota_exhausted":
+        if retry_after_seconds is not None:
+            retry_at = int(time.time()) + max(0, retry_after_seconds)
+        elif reset_at is None:
+            retry_at = int(time.time()) + 60
     return {
         "label": label,
         "state": state,
         "status_code": status_code,
         "limit": _header_int(headers, "RateLimit-Limit"),
-        "remaining": _header_int(headers, "RateLimit-Remaining"),
-        "reset_at": _header_int(headers, "RateLimit-Reset"),
-        "retry_after_seconds": _header_int(headers, "Retry-After"),
+        "remaining": remaining,
+        "reset_at": reset_at,
+        "retry_after_seconds": retry_after_seconds,
+        "retry_at": retry_at,
         "latency_ms": latency_ms,
         "checked_at": _now_iso(),
     }
 
 
-def _call_context7(api_key, path, params=None, timeout=15):
+def _read_context7_body(response, deadline):
+    socket_handle = None
+    candidate = response
+    for _ in range(3):
+        raw = getattr(candidate, "raw", None)
+        socket_handle = getattr(raw, "_sock", None) or getattr(
+            candidate, "_sock", None
+        )
+        if socket_handle is not None and hasattr(socket_handle, "settimeout"):
+            break
+        candidate = getattr(candidate, "fp", None)
+        if candidate is None:
+            socket_handle = None
+            break
+    if socket_handle is None or not hasattr(socket_handle, "settimeout"):
+        raise OSError("Context7 response stream does not support deadlines")
+    chunks = []
+    total = 0
+    while total <= MAX_UPSTREAM_RESPONSE_BYTES:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Context7 response deadline exceeded")
+        socket_handle.settimeout(remaining)
+        read_chunk = getattr(response, "read1", response.read)
+        chunk = read_chunk(
+            min(64 * 1024, MAX_UPSTREAM_RESPONSE_BYTES + 1 - total)
+        )
+        if time.monotonic() > deadline:
+            raise TimeoutError("Context7 response deadline exceeded")
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+    body = b"".join(chunks)
+    if len(body) > MAX_UPSTREAM_RESPONSE_BYTES:
+        raise ValueError("Context7 response exceeds the configured size limit")
+    return body
+
+
+def _call_context7(api_key, path, params=None, timeout=15, deadline=None):
     if path not in ALLOWED_CONTEXT7_PATHS:
         raise ValueError("unsupported Context7 endpoint")
     query = urllib.parse.urlencode(params or {})
@@ -357,12 +465,16 @@ def _call_context7(api_key, path, params=None, timeout=15):
         },
     )
     started = time.monotonic()
+    deadline = min(deadline or started + timeout, started + timeout)
     try:
         opener = urllib.request.build_opener(NoRedirectHandler())
-        with opener.open(request, timeout=timeout) as response:
-            body = response.read(MAX_UPSTREAM_RESPONSE_BYTES + 1)
-            if len(body) > MAX_UPSTREAM_RESPONSE_BYTES:
-                raise ValueError("Context7 response exceeds the configured size limit")
+        connect_timeout = deadline - time.monotonic()
+        if connect_timeout <= 0:
+            raise TimeoutError("Context7 request deadline exceeded")
+        with opener.open(
+            request, timeout=connect_timeout
+        ) as response:
+            body = _read_context7_body(response, deadline)
             return (
                 response.status,
                 body,
@@ -370,9 +482,7 @@ def _call_context7(api_key, path, params=None, timeout=15):
                 round((time.monotonic() - started) * 1000, 1),
             )
     except urllib.error.HTTPError as exc:
-        body = exc.read(MAX_UPSTREAM_RESPONSE_BYTES + 1)
-        if len(body) > MAX_UPSTREAM_RESPONSE_BYTES:
-            raise ValueError("Context7 response exceeds the configured size limit")
+        body = _read_context7_body(exc, deadline)
         return (
             exc.code,
             body,
@@ -385,7 +495,9 @@ def get_context7_accounts(refresh=False):
     """Return quota evidence with cached, single-flight account probing."""
     accounts = load_context7_accounts()
     if not accounts:
+        _sync_context7_accounts(accounts)
         return []
+    generation = _sync_context7_accounts(accounts)
 
     def cached_items():
         with _cache_lock:
@@ -423,6 +535,7 @@ def get_context7_accounts(refresh=False):
                 "remaining": None,
                 "reset_at": None,
                 "retry_after_seconds": None,
+                "retry_at": None,
                 "latency_ms": round((time.monotonic() - started) * 1000, 1),
                 "checked_at": _now_iso(),
             }
@@ -434,6 +547,8 @@ def get_context7_accounts(refresh=False):
         with ThreadPoolExecutor(max_workers=min(4, len(accounts))) as executor:
             items = list(executor.map(probe, accounts))
         with _cache_lock:
+            if generation != _context7_account_generation:
+                return list(_context7_cache["items"])
             _context7_runtime.update({item["label"]: item for item in items})
             _context7_cache.update({"at": time.monotonic(), "items": items})
         return items
@@ -450,8 +565,11 @@ def pooled_context7_request(path, params=None):
     global _context7_cursor
     accounts = load_context7_accounts()
     if not accounts:
+        _sync_context7_accounts(accounts)
         raise Context7PoolError("no Context7 accounts configured")
+    generation = _sync_context7_accounts(accounts)
     query_key = (
+        generation,
         path,
         tuple(sorted((str(key), str(value)) for key, value in (params or {}).items())),
     )
@@ -466,23 +584,35 @@ def pooled_context7_request(path, params=None):
         _context7_cursor += 1
     ordered = accounts[start:] + accounts[:start]
     last_status = 503
+    deadline = time.monotonic() + CONTEXT7_POOL_DEADLINE_SECONDS
     for account in ordered:
         runtime = _context7_runtime.get(account["label"], {})
         reset_at = runtime.get("reset_at")
+        retry_at = runtime.get("retry_at")
+        unavailable_until = max(reset_at or 0, retry_at or 0)
         quota_still_exhausted = (
             runtime.get("state") == "quota_exhausted"
-            and (not reset_at or reset_at > int(time.time()))
+            and unavailable_until > int(time.time())
         )
         if runtime.get("state") == "auth_error" or quota_still_exhausted:
             continue
+        remaining_seconds = deadline - time.monotonic()
+        if remaining_seconds <= 0:
+            break
         try:
             status, body, headers, latency = _call_context7(
-                account["_api_key"], path, params
+                account["_api_key"],
+                path,
+                params,
+                timeout=min(15, remaining_seconds),
+                deadline=deadline,
             )
         except (urllib.error.URLError, TimeoutError, OSError):
             continue
         state = _context7_state(account["label"], status, headers, latency)
         with _cache_lock:
+            if generation != _context7_account_generation:
+                raise Context7PoolError("Context7 account configuration changed; retry")
             _context7_runtime[account["label"]] = state
             _context7_cache["items"] = [
                 state if item["label"] == account["label"] else item
@@ -498,16 +628,6 @@ def pooled_context7_request(path, params=None):
                 "cache_hit": False,
             }
             if status == 200:
-                with _cache_lock:
-                    if len(_context7_query_cache) >= CONTEXT7_QUERY_CACHE_MAX_ITEMS:
-                        oldest_key = min(
-                            _context7_query_cache,
-                            key=lambda key: _context7_query_cache[key]["at"],
-                        )
-                        _context7_query_cache.pop(oldest_key, None)
-                    _context7_query_cache[query_key] = {
-                        "at": time.monotonic(),
-                        "result": result,
-                    }
+                _cache_context7_result(query_key, result, generation)
             return result
     raise Context7PoolError("all Context7 accounts are unavailable", last_status)

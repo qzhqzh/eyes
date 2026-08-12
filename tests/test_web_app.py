@@ -74,7 +74,125 @@ assert response.get_json()['result']['protocolVersion'] == '2025-03-26'
 response = client.post(
     '/mcp/context7',
     headers=mcp_headers | {'MCP-Protocol-Version': '2099-01-01'},
+    json={'jsonrpc': '2.0', 'id': 'legacy-fallback', 'method': 'initialize', 'params': {'protocolVersion': '2099-01-01'}},
+)
+assert response.status_code == 200
+assert response.get_json()['result']['protocolVersion'] == '2025-03-26'
+modern_meta = {
+    'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+    'io.modelcontextprotocol/clientInfo': {'name': 'eyes-smoke', 'version': '1'},
+    'io.modelcontextprotocol/clientCapabilities': {},
+}
+modern_headers = mcp_headers | {
+    'MCP-Protocol-Version': '2026-07-28',
+    'Mcp-Method': 'server/discover',
+}
+response = client.post(
+    '/mcp/context7',
+    headers=modern_headers,
+    json={
+        'jsonrpc': '2.0',
+        'id': 'discover',
+        'method': 'server/discover',
+        'params': {'_meta': modern_meta},
+    },
+)
+assert response.status_code == 200
+discover = response.get_json()['result']
+assert discover['supportedVersions'] == ['2026-07-28']
+assert discover['resultType'] == 'complete'
+assert discover['cacheScope'] == 'private'
+assert discover['_meta']['io.modelcontextprotocol/serverInfo']['name'] == 'eyes-context7-pool'
+response = client.post(
+    '/mcp/context7',
+    headers=modern_headers | {'Mcp-Method': 'tools/list'},
+    json={
+        'jsonrpc': '2.0',
+        'id': 'tools',
+        'method': 'tools/list',
+        'params': {'_meta': modern_meta},
+    },
+)
+assert response.status_code == 200
+assert response.get_json()['result']['resultType'] == 'complete'
+assert response.get_json()['result']['ttlMs'] == 300000
+response = client.post(
+    '/mcp/context7',
+    headers=modern_headers | {'Mcp-Method': 'tools/call', 'Mcp-Name': 'wrong-tool'},
+    json={
+        'jsonrpc': '2.0',
+        'id': 'mismatch',
+        'method': 'tools/call',
+        'params': {
+            '_meta': modern_meta,
+            'name': 'resolve-library-id',
+            'arguments': {'libraryName': 'flask', 'query': 'routing'},
+        },
+    },
+)
+assert response.status_code == 400
+assert response.get_json()['error']['code'] == -32020
+with mock.patch(
+    'app.call_context7_pool',
+    return_value={'status_code': 200, 'body': {'results': []}, 'content_type': 'application/json'},
+):
+    response = client.post(
+        '/mcp/context7',
+        headers=modern_headers | {'Mcp-Method': 'tools/call', 'Mcp-Name': 'resolve-library-id'},
+        json={
+            'jsonrpc': '2.0',
+            'id': 'modern-call',
+            'method': 'tools/call',
+            'params': {
+                '_meta': modern_meta,
+                'name': 'resolve-library-id',
+                'arguments': {'libraryName': 'flask', 'query': 'routing'},
+            },
+        },
+    )
+assert response.status_code == 200
+assert response.get_json()['result']['resultType'] == 'complete'
+assert response.get_json()['result']['structuredContent'] == {'results': []}
+response = client.post(
+    '/mcp/context7',
+    headers=mcp_headers | {'MCP-Protocol-Version': '2099-01-01'},
     json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'},
+)
+assert response.status_code == 400
+assert response.get_json()['error']['code'] == -32022
+assert response.get_json()['error']['data'] == {'supported': ['2026-07-28'], 'requested': '2099-01-01'}
+response = client.post(
+    '/mcp/context7',
+    headers=modern_headers | {'Mcp-Method': 'initialize'},
+    json={
+        'jsonrpc': '2.0',
+        'id': 'modern-initialize',
+        'method': 'initialize',
+        'params': {'_meta': modern_meta},
+    },
+)
+assert response.status_code == 404
+assert response.get_json()['error']['code'] == -32601
+response = client.post(
+    '/mcp/context7',
+    headers=mcp_headers | {
+        'MCP-Protocol-Version': '2025-03-26',
+        'Mcp-Method': 'tools/list',
+    },
+    json={
+        'jsonrpc': '2.0',
+        'id': 'downgrade',
+        'method': 'tools/list',
+        'params': {'_meta': modern_meta},
+    },
+)
+assert response.status_code == 400
+assert response.get_json()['error']['code'] == -32020
+deep_json = '[' * 1100 + '0' + ']' * 1100
+response = client.post(
+    '/mcp/context7',
+    headers=mcp_headers | {'Content-Type': 'application/json'},
+    data=deep_json,
 )
 assert response.status_code == 400
 response = client.post(
